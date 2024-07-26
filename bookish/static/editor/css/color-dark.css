@@ -1,0 +1,79 @@
+/* Color Theme */
+
+
+/* Dark */
+
+body {
+    color: white;
+}
+
+a, a:hover, a:focus, .toolBar, .sideSection #recentlyVisited h6 {
+    color: white!important;
+}
+
+a:hover, .mainContainer .sideSection #recentlyVisited li:hover, .mainContainer .editorSection .titleBar li:hover, .mainContainer .editorSection .titleBar li:focus {
+    background-color: #505050!important;
+    background-image: none!important;
+}
+
+li[role="separator"] {
+    background: #505050!important;
+}
+
+.navbar {
+    border-color: #303030!important;
+}
+
+.sideSection {
+    background-color: #202020;
+}
+
+.mainContainer .sideSection, .verticalDragBar, .horizontalDragBar, .mainContainer .sideSection .breadcrumb_hide > span {
+    border-color: #909090;
+}
+
+.open >a, .dropdown-menu, a:focus {
+    background-color: #303030!important;
+}
+
+.navbar, .mainContainer .sideSection .sideSection_breadcrumb, .mainContainer .sideSection .breadcrumb, .mainContainer .sideSection #recentlyVisited h6, .mainContainer .editorSection .toolBar, .mainContainer .editorSection .titleBar, .mainContainer .editorSection .titleBar li, .mainContainer .sideSection #fileList li.fileSelected, .mainContainer .sideSection #fileList li.directorySelected {
+    background-color: #303030;
+}
+
+.mainContainer .sideSection #fileList, .mainContainer .editorSection .editorWrap .CodeMirror, .mainContainer .editorSection .toolBar, .mainContainer .editorSection .titleBar, .mainContainer .sideSection #fileList li a, .mainContainer .sideSection #recentlyVisited li, .mainContainer .sideSection .newFileEntry {
+    border-color: #303030;
+}
+
+.mainContainer .editorSection .titleBar li.activeTab {
+    background-color: #161616;
+}
+
+::-webkit-scrollbar, ::-webkit-scrollbar-button, ::-webkit-scrollbar-track {
+    background-color: #161616;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #353535;
+}
+
+.CodeMirror-scrollbar-filler, .CodeMirror-gutter-filler {
+    background-color: black!important;
+}
+
+/* Modals */
+.modal-content {
+    color:white!important;
+    background-color: #303030!important;
+}
+
+@media (min-width:992px) {
+    .mainContainer .previewSection {
+        border-color: #909090;
+    }
+}
+
+@media (max-width:991px) {
+    .mainContainer .editorSection {
+        border-color: #909090;
+    }
+}

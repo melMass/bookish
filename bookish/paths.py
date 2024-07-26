@@ -206,7 +206,7 @@ def basepath(path):
     assert path.startswith("/")
     dot = path.rfind(".")
     slash = path.rfind("/")
-    if dot > slash and dot >= 0:
+    if dot > slash and dot >= 0 and not path[dot + 1:].isdigit():
         return path[:dot]
     else:
         return path
@@ -264,20 +264,41 @@ def extension(path):
     """
     name = basename(path)
     if "." in name:
-        return name[name.rfind("."):]
-    else:
-        return ""
+        pos = name.rfind(".")
+        # For backwards compatibility, this function returns the dot along
+        # with the rest of the extension
+        if not name[pos + 1:].isdigit():
+            return name[pos:]
+
+    return ""
 
 
-def strip_extension(name):
+def strip_extension(name, ext=None):
     """
-    Removes any extension from the given string.
+    Removes a specific extension (if given), or any extension, from the given
+    string.
     """
 
     if "." in name:
-        return name[:name.rfind(".")]
-    else:
-        return name
+        pos = name.rfind(".")
+        if not name[pos + 1:].isdigit():
+            if ext:
+                if name[pos:] != ext:
+                    return name
+            return name[:pos]
+
+    return name
+
+
+def split_path_parts(path):
+    """
+    Returns a list of the names in the path.
+
+    >>> split_path_parts("/a/b/c")
+    ["a", "b", "c"]
+    """
+
+    return path.strip("/").split("/")
 
 
 def split_dirpath(path):

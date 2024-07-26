@@ -12,7 +12,7 @@ function tellHoudiniToLoad(file, launch, callback) {
 
     try {
 		$.ajax("/_load_example", {
-			method: "POST",
+			method: "PUT",
 			data: {
 				url: file,
 				launch: launch
@@ -20,7 +20,7 @@ function tellHoudiniToLoad(file, launch, callback) {
 			error: function(xhr, status, err) {
 				alert("Error loading example: " + err);
 			},
-			success: function(data, status, xhr) {
+            success: function(data, status, xhr) {
 				// TODO: do something to the load UI to indicate success
 			}
 		})
@@ -38,7 +38,7 @@ function loadExample(file, launch) {
             launch = launch ? "True" : "False";
             var exp = "__import__('houdinihelp').load_example(\"" + file + "\", launch=" + launch + ")";
             Python.runStringExpression(exp, function(result) {
-                if (result != "None") {
+                if (result != "" && result != "None") {
                     alert(result);
                 }
             });
@@ -63,6 +63,6 @@ function getExamplePrefix() {
             return pre;
         }
     } else {
-        return "$HFS/houdini/help";
+        return "";
     }
 }

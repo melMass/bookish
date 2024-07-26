@@ -1,0 +1,49 @@
+/* Color Theme */
+
+
+/* Light */
+
+a, a:hover, a:focus {
+    color: black!important;
+}
+
+a:hover, .mainContainer .editorSection .titleBar .hiddenTabs .hiddenList li:hover, .mainContainer .editorSection .titleBar li:hover, #recentlyVisited li:hover {
+    background-color: #e2e2e2!important;
+    background-image: none!important;
+}
+
+.navbar, .mainContainer .editorSection .toolBar input, .mainContainer .editorSection .toolBar button {
+    border-color: #e2e2e2!important;
+}
+
+.markupCheatsheet, .mainContainer .editorSection .titleBar .hiddenTabs ul, .mainContainer .editorSection .titleBar .hiddenTabs .hiddenList li, .mainContainer .editorSection .titleBar li.activeTab {
+    background-color: #ffffff;
+}
+
+.navbar, .mainContainer .sideSection .sideSection_breadcrumb, .mainContainer .sideSection #recentlyVisited h6, .mainContainer .editorSection .toolBar, .mainContainer .editorSection .titleBar, .mainContainer .editorSection .titleBar li, .mainContainer .sideSection #fileList li.fileSelected, .mainContainer .sideSection #fileList li.directorySelected, .mainContainer .editorSection .toolBar button.selectedBtn {
+    background-color: #f2f2f2;
+}
+
+.mainContainer .sideSection, .mainContainer .sideSection .breadcrumb_hide > span {
+    border-color: #a9a9a9;
+}
+
+.mainContainer .editorSection .titleBar .hiddenTabs li.divider, .verticalDragBar, .horizontalDragBar {
+    background-color: #d0d0d0;
+}
+
+.mainContainer .sideSection #fileList, .mainContainer .editorSection .editorWrap .CodeMirror, .mainContainer .editorSection .toolBar, .mainContainer .editorSection .titleBar, .mainContainer .sideSection #fileList li a, .mainContainer .sideSection #recentlyVisited li, .mainContainer .editorSection .toolBar .input-group .input-group-addon, .mainContainer .sideSection .newFileEntry {
+    border-color: #e2e2e2;
+}
+
+@media (min-width:992px) {
+    .mainContainer .previewSection {
+        border-color: #a9a9a9;
+    }
+}
+
+@media (max-width:991px) {
+    .mainContainer .editorSection {
+        border-color: #a9a9a9;
+    }
+}

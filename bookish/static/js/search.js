@@ -1,30 +1,41 @@
-jQuery.fn.searchbox = function(url, queryopts, delay) {
+jQuery.fn.searchbox = function(delay) {
     return this.each(function() {
-        if (queryopts == undefined) {
-            queryopts = {};
-        }
-        if (delay == undefined) {
-            delay = 100;
+        if (delay === undefined) {
+            delay = 250;
         }
 
         // Grab a jQuery reference to the textbox
         var textbox = $(this);
+        var boxid = textbox.attr("id");
+
+        // Look for options in data- attributes on the search box
+        var searchpath = textbox.attr("data-path") || "/_search";
+        var noPopup = textbox.attr("data-popup") == "false";
+        var require = textbox.attr("data-require");
+        var lang = textbox.attr("data-lang") || "en";
+
         // Create a div for the search results and append it to the body
-        var resultsdiv = $('<div>').attr("class", "search-results");
+        var resultsdiv = $('<div id="' + boxid + '-results">').attr("class", "search-results");
 
         var catname = null;
         var resultcount = 0;
         var selected = 0;
-        var latest = -1;
+        var sequence = -1;
         var lastqstring = null;
         var timer = null;
+        var body = $("body");
 
-        $("body").mouseup(function(e) {
-            if (e.target !== textbox[0]
-                && $(e.target).closest(resultsdiv).length == 0) {
-                hideResults()
-            }
-        }).append(resultsdiv);
+        if (!noPopup) {
+            body.mouseup(function (e) {
+                if (e.target !== textbox[0]
+                    && $(e.target).closest(resultsdiv).length == 0) {
+                    hideResults()
+                }
+            })
+        }
+
+        var resultsparent = noPopup ? textbox.parent() : body;
+        resultsparent.append(resultsdiv);
 
         textbox.focus(function() {
            update();
@@ -40,7 +51,9 @@ jQuery.fn.searchbox = function(url, queryopts, delay) {
 				return false;
 			} else if (keycode == 27) {
 				// Escape
-				hideResults();
+                if (!noPopup) {
+                    hideResults();
+                }
 				return false;
 			} else if (keycode == 38) {
 				// Up key
@@ -72,7 +85,7 @@ jQuery.fn.searchbox = function(url, queryopts, delay) {
         });
 
         function updateCss() {
-			resultsdiv.find("li.hit").each(function(i) {
+			resultsdiv.find(".hit").each(function(i) {
 				if (i == selected) {
 					$(this).addClass("selected");
 				} else {
@@ -81,13 +94,29 @@ jQuery.fn.searchbox = function(url, queryopts, delay) {
 			});
 		}
 
+        function setCategory(name) {
+            catname = name;
+            update(true);
+        }
+
         function enterClick(e) {
-            e = $(e || resultsdiv.find("li.selected"));
-            if (e.hasClass("more")) {
-                catname = e.parent().attr("data-name");
-                update(true);
+            if (e) {
+                // User might have clicked an element inside the list item, so
+                // find the closest list item
+                e = $(e).closest(".hit")
             } else {
-                window.location = e.find("a").attr("href");
+                e = resultsdiv.find(".hit.selected")
+            }
+
+            if (e.hasClass("more")) {
+                setCategory(e.parent().attr("data-name"));
+            } else if (e.hasClass("findpage")) {
+                window.location = "/find?q=" + encodeURIComponent(textbox.val());
+            } else {
+                var href = e.find("a").attr("href");
+                if (href) {
+                    window.location = href;
+                }
             }
 		}
 
@@ -100,16 +129,15 @@ jQuery.fn.searchbox = function(url, queryopts, delay) {
 
         function fillResults(html) {
             html = $(html);
-            var sent = Number(html.attr("data-sent"));
-            if (sent <= latest) return;
-            latest = sent;
+            var seq = Number(html.attr("data-sequence"));
+            // console.log("Incoming seq=", seq, "current=", sequence);
+            if (seq < sequence) return;
 
             resultsdiv.html(html);
 
-            var hits = html.find("li.hit");
-            resultcount = hits.size();
+            var hits = html.find(".hit");
+            resultcount = hits.length;
             selected = 0;
-
             hits.mouseover(function(e) {
                 var target = $(e.target);
                 while (!target.hasClass("hit")) {
@@ -126,6 +154,11 @@ jQuery.fn.searchbox = function(url, queryopts, delay) {
             }).click(function(e) {
                 enterClick(e.target);
             });
+            
+            var cats = html.find(".cat");
+            cats.click(function(e) {
+                setCategory($(this).attr("data-name"));
+            });
 
             updateCss();
         }
@@ -140,14 +173,18 @@ jQuery.fn.searchbox = function(url, queryopts, delay) {
                 //var startpos = getSelectionStart(box);
                 //var endpos = getSelectionEnd(box);
 
-                console.log("Running", qstring, catname);
-                $.ajax("/_search", {
+                sequence++;
+                //console.log("Running", qstring, catname, sequence);
+                $.ajax(searchpath, {
                     data: {
                         q: qstring,
+                        sequence: sequence,
                         category: catname,
+                        require: require,
+                        permanent: noPopup ? "true" : "false",
+                        lang: lang
                         //startpos: startpos,
                         //endpos: endpos,
-                        template: "/templates/results.jinja2"
                     },
                     success: function (data) {
                         fillResults(data);
@@ -159,5 +196,10 @@ jQuery.fn.searchbox = function(url, queryopts, delay) {
                 lastqstring = qstring;
             }
         }
+
+        if (noPopup) {
+            update();
+        }
     });
 };
+

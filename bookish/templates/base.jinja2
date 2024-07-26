@@ -1,25 +1,26 @@
 <!DOCTYPE html>
-<html>
+<html lang="{{ config.LANGUAGE | d("en") }}">
 <head>
 {% block head %}
+    {% block prehead %}
+    {% endblock %}
     {% block viewport %}
     <meta name="viewport" content="width=device-width, initial-scale=1">
     {% endblock %}
 
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta charset="{% block charset %}UTF-8{% endblock %}">
-    {% block styles %}{% endblock %}
+    {% block meta %}{% endblock %}
 
     <link rel="icon" href="{{ rel(config.ICON_32 | d("")) }}">
     <link rel="apple-touch-icon-precomposed" sizes="144x144" href="{{ rel(config.ICON_144 | d("")) }}">
+    {% block styles %}{% endblock %}
 
     <script src="{{ rel("/static/js/jquery.min.js") }}"></script>
-    {# <script src="{{ rel("/semantic/dist/semantic.js") }}"></script> #}
-
     {% block scripts %}
     {% endblock %}
 
-    <title>{% block title %}{{ title }} {{ title_suffix }}{% endblock %}</title>
+    <title>{% block title %}{{ title }}{% endblock %}</title>
 {% endblock %}
 </head>
 <body class="{% block bodyclass %}{% endblock %}">
@@ -29,3 +30,4 @@
 
 </body>
 </html>
+

@@ -1,15 +1,18 @@
-{% extends "/templates/page_base.jinja2" %}
+{% extends "/templates/page.jinja2" %}
 
-{% block title %}Preview of {{ path }}{% endblock %}
+{% block title %}Preview of {{ path }}{% endblock %}\
 
 {% block bodyclass -%}
     {{ docroot.attrs.display if docroot.attrs }}
+    notoc
 {%- endblock %}
 
-{% block body %}
-    <div id="main" class="preview">
+{% block navbar %}{% endblock %}
+
+{% block main %}
+    <main class="preview">
         <div id="content" class="sizing">
 {{ render_styles(docroot) }}
         </div>
-    </div>
+    </main>
 {% endblock %}

@@ -18,6 +18,7 @@
             .kv {
                 font-size: small;
                 color: #666;
+                margin-right: 0.5em;
             }
             .key {
                 font-weight: bold;
@@ -25,7 +26,34 @@
             .text {
                 font-family: monospace;
             }
+
+            .collapsible {
+                cursor: pointer;
+            }
+            .collapsed {
+            }
+            .collapsed .value {
+                display: none;
+            }
+            .collapsed:after {
+                display: inline;
+                content: "...";
+                border: 1px dotted black;
+            }
         </style>
+        <script src="/static/js/jquery.min.js"></script>
+        <script>
+            $(document).ready(function() {
+                $(".collapsible").click(function() {
+                    var e = $(this);
+                    if (e.hasClass("collapsed")) {
+                        e.removeClass("collapsed");
+                    } else {
+                        e.addClass("collapsed");
+                    }
+                })
+            })
+        </script>
     </head>
 <body>
 
@@ -44,20 +72,23 @@
         <span class="attrs">
             {% for key in block.keys() | sort %}
                 {% if key not in ('body', 'text', 'type', 'thead', 'tfoot') %}
-                    <span class="kv">
+                    {% set cls = "collapsible collapsed" if key == "parents" %}
+                    <span class="kv {{ cls }}">
                         <span class="key">{{ key }}</span>=<span class="value">{{ block[key] | escape }}</span>
                     </span>
                 {% endif %}
             {% endfor %}
         </span>
     </p>
-    <p class="text">{{ block.text }}</p>
+    <p class="text">{{ block.text | escape }}</p>
     {% if block.thead %}
         {{ list_items(block.thead) }}
     {% endif %}
+
     {% if block.body %}
         {{ list_items(block.body) }}
     {% endif %}
+
     {% if block.tfoot %}
         {{ list_items(block.thead) }}
     {% endif %}

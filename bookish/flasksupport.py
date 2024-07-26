@@ -1,55 +1,114 @@
-# Copyright 2015 Matt Chaput. All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-#    1. Redistributions of source code must retain the above copyright notice,
-#       this list of conditions and the following disclaimer.
-#
-#    2. Redistributions in binary form must reproduce the above copyright
-#       notice, this list of conditions and the following disclaimer in the
-#       documentation and/or other materials provided with the distribution.
-#
-# THIS SOFTWARE IS PROVIDED BY MATT CHAPUT ``AS IS'' AND ANY EXPRESS OR
-# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
-# EVENT SHALL MATT CHAPUT OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
-# OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
-# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-# The views and conclusions contained in the software and documentation are
-# those of the authors and should not be interpreted as representing official
-# policies, either expressed or implied, of Matt Chaput.
+import os
+import threading
 
-from bookish import paths
+import werkzeug.serving
+
+from bookish import config, flaskapp, paths, search
+from bookish.wiki import styles, wikipages
+
+from houdinihelp import hpages
+
+
+class BackgroundIndexUnavailable(Exception):
+    pass
+
+
+indexlock = threading.Lock()
+
+
+def setup(app):
+    setup_logging(app)
+    setup_store(app)
+    setup_jinja(app)
+    Scss(app)
+
+    if not werkzeug.serving.is_running_from_reloader():
+        BgIndex(app)
+
+
+def setup_config(app, config_file=None, use_houdini_path=True):
+    from houdinihelp import hconfig
+
+    hconfig.read_houdini_config(app.config, config_file,
+                                use_houdini_path=use_houdini_path)
+
+
+def setup_logging(app):
+    wikipages.logger_from_config(app.config, app.logger)
+
+
+def setup_store(app):
+    store = wikipages.store_from_config(app.config)
+    app.store = store
+
+
+def setup_jinja(app):
+    store = app.store
+    hpages.jinja_from_config(app.config, store, app.jinja_env)
+
+
+class BgIndex(object):
+    def __init__(self, app):
+        self.enabled = app.config.get("ENABLE_BACKGROUND_INDEXING")
+        self.autostart = app.config.get("AUTOSTART_BACKGROUND_INDEXING")
+        self.interval = app.config.get("BACKGROUND_INDEXING_INTERVAL", 60.0)
+        self.timer = None
+
+        if self.enabled and self.autostart:
+            self.app = app
+            self.start_bg_indexing()
+
+    def start_bg_indexing(self):
+        locked = indexlock.acquire(False)
+        if not locked:
+            raise BackgroundIndexUnavailable
+        if self.timer:
+            raise Exception("Background indexing is already started")
+
+        self.app.logger.info("Starting background indexing, interval %s s" %
+                             self.interval)
+        self.reschedule()
+
+    def reschedule(self):
+        self.timer = threading.Timer(self.interval, self.trigger, ())
+        self.timer.daemon = True
+        self.timer.start()
+
+    def trigger(self):
+        from bookish.search import LockError
+
+        self.app.logger.info("Periodic reindex")
+
+        pages = flaskapp.get_wikipages(self.app)
+        indexer = pages.indexer()
+        try:
+            indexer.update(pages)
+        except LockError:
+            pass
+
+        self.reschedule()
 
 
 class Scss(object):
-    def __init__(self, app, store):
+    def __init__(self, app):
         self.app = app
+        if not app.config.get("AUTO_COMPILE_SCSS"):
+            return
 
         try:
             import sass
         except ImportError:
-            self.app.logger.warning("libsass not available")
+            self.app.logger.info("libsass not available")
             return
 
-        self.store = store
         self.asset_dir = self.app.config.get("SCSS_ASSET_DIR")
+        self.store = flaskapp.get_store(app)
 
         if not self.asset_dir:
             self.app.logger.warning("No SCSS_ASSET_DIR configured.")
             return
-        if not self.store.exists(self.asset_dir):
-            self.app.logger.error("SCSS asset dir %r does not exist",
-                                  self.asset_dir)
-            return
 
-        self.update_scss()
+        # self.update_scss()
         if self.app.testing or self.app.debug:
             self.set_hooks()
 
@@ -71,7 +130,7 @@ class Scss(object):
 
     def out_of_date(self, path):
         s = self.store
-        mtime = self.store.last_modified(path)
+        mtime = s.last_modified(path)
         opath = self.output_path(path)
         if not s.exists(opath) or mtime > s.last_modified(opath):
             return True
@@ -96,6 +155,12 @@ class Scss(object):
             if self.out_of_date(path):
                 self.compile_scss(path)
 
+    def import_hook(self, path):
+        if not paths.is_abs(path):
+            path = paths.join(self.asset_dir, path)
+        if self.store.exists(path):
+            return [(path, self.store.content(path))]
+
     def compile_scss(self, path):
         import os.path
 
@@ -107,7 +172,8 @@ class Scss(object):
         self.app.logger.info("SCSS compiling %s", fp)
         try:
             import sass
-            css = sass.compile(filename=fp, precision=3)
+            css = sass.compile(filename=fp, precision=3,
+                               importers=[(0, self.import_hook)])
         except:
             import sys
             e = sys.exc_info()[1]

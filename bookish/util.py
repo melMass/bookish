@@ -38,11 +38,12 @@ from contextlib import contextmanager
 
 import bookish
 from bookish import paths
-from bookish.compat import range, string_type, perf_counter, htmlparser
+from bookish.compat import range, string_type, perf_counter, htmlparser, unichr
+
+from html import escape, unescape
 
 
 random_chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-html = htmlparser.HTMLParser()
 
 
 def random_id(length=10):
@@ -77,8 +78,16 @@ class TempDB(object):
             os.remove(self.path)
 
 
+def get_prefixed_paths(pages, prefix):
+    prefixdir = prefix if prefix.endswith("/") else paths.parent(prefix)
+    for path in pages.store.list_all(prefixdir):
+        if not path.startswith(prefix):
+            continue
+        yield path
+
+
 def decode_named_entity(name):
-    return html.unescape("&%s;" % name)
+    return unescape("&%s;" % name)
 
 
 def builtin_grammar(name):
@@ -208,9 +217,9 @@ def file_paths(dirpath, include=None, exclude=None, callback=None):
 
 
 class Context(object):
-    def __init__(self, m=None):
-        self.parent = None
+    def __init__(self, m=None, parent=None):
         self.map = m
+        self.parent = parent
 
     def __iter__(self, seen=None):
         seen = seen or set()
@@ -225,6 +234,20 @@ class Context(object):
 
     def __repr__(self):
         return "%s(%r)" % (type(self).__name__, self._list_maps())
+
+    def top(self):
+        if self.parent:
+            return self.parent.top()
+        else:
+            return self.map
+
+    def has_keys(self):
+        if self.map:
+            return True
+        elif self.parent:
+            return self.parent.has_keys()
+        else:
+            return False
 
     def _list_maps(self):
         out = []
@@ -289,11 +312,8 @@ class Context(object):
         self.map.update(m)
 
     def push(self, m=None):
-        c = self.__class__(m)
-        if self.map:
-            c.parent = self
-        else:
-            c.parent = self.parent
+        parent = self if (self.map or not self.parent) else self.parent
+        c = self.__class__(m, parent=parent)
         return c
 
     def first(self):
@@ -325,15 +345,18 @@ def find_object(name, blacklist=None, whitelist=None):
         if not passes:
             raise TypeError("Can't instantiate %r" % name)
 
-    lastdot = name.rfind(".")
-
-    assert lastdot > -1, "Name %r must be fully qualified" % name
-    modname = name[:lastdot]
-    clsname = name[lastdot + 1:]
-
-    mod = __import__(modname, fromlist=[clsname])
-    cls = getattr(mod, clsname)
-    return cls
+    if "." in name:
+        lastdot = name.rfind(".")
+        modname = name[:lastdot]
+        clsname = name[lastdot + 1:]
+        try:
+            mod = __import__(modname, fromlist=[clsname])
+        except ImportError as e:
+            e.msg = "Trying to import %s: %s" % (name, e.msg)
+            raise e
+        return getattr(mod, clsname)
+    else:
+        return __import__(name)
 
 
 def pyliteral(value, fallback_to_string=False):
@@ -428,21 +451,43 @@ def memoize(f):
     return helper
 
 
-def make_rel_fn(basepath, index_page_name):
-    def rel(pathstring):
+def make_rel_fn(basepath, index_page_name, store=None, ext=".html"):
+    # Returns a function that makes absolute paths relative to the given
+    # basepath. For example, if basepath is "/a/b/foo", this returns a function
+    # that would translate "/a/bar" into "../bar".
+
+    def rel(pathstring, default_ext=ext):
         if not pathstring:
             return ""
+        pathstring = pathstring.strip()
         if pathstring.startswith("http:") or pathstring.startswith("https:"):
             return pathstring
 
         if pathstring.startswith("/") and pathstring.endswith("/"):
             pathstring += index_page_name
+
+        if not paths.extension(pathstring) and default_ext is not None:
+            # If the path has a fragment, make sure to insert the extension in
+            # the right place
+            prefix, frag = paths.split_fragment(pathstring)
+            pathstring = prefix + default_ext + frag
+
+        # Make target string absolute
+        pathstring = paths.join(basepath, pathstring)
+
+        # If we have a store, see if it wants to redirect this path
+        if store:
+            repath = store.redirect(pathstring)
+            if repath:
+                pathstring = repath
+
         return paths.relativize(basepath, pathstring)
+
     return rel
 
 
 namere1 = re.compile("[ \t\r\n]+")
-namere2 = re.compile("\W+")
+namere2 = re.compile(r"\W+")
 
 
 def make_id(name):
@@ -496,3 +541,5 @@ class DbLruCache(object):
         if len(a) >= self.maxsize:
             b.clear()
             self.ptr = not ptr
+
+

@@ -1,4 +1,4 @@
-# Copyright 2013 Matt Chaput. All rights reserved.
+# Copyright 2017 Matt Chaput. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -25,6 +25,57 @@
 # those of the authors and should not be interpreted as representing official
 # policies, either expressed or implied, of Matt Chaput.
 
-from .parser import *
-from .rules import *
+from bookish import util
+
+
+class ParserError(Exception):
+    pass
+
+
+class ParserContext(util.Context):
+    def __init__(self, m=None, parent=None, namespace=None, debug=False):
+        super(ParserContext, self).__init__(m, parent)
+        if namespace:
+            self._namespace = namespace
+        elif parent:
+            self._namespace = None
+        else:
+            self._namespace = {}
+        self._debug = debug
+        self._cache = None if parent else {}
+
+    def __repr__(self):
+        return "<%s %r %r>" % (type(self).__name__,
+                               list(self.namespace.keys()),
+                               list(self.keys()))
+
+    @property
+    def namespace(self):
+        return self.parent.namespace if self.parent else self._namespace
+
+    @property
+    def debug(self):
+        return self._debug or (self.parent and self.parent.debug)
+
+    @property
+    def cache(self):
+        return self.parent.cache if self.parent else self._cache
+
+    def set_debug(self, v):
+        self._debug = v
+        return self
+
+
+def condition_string(c, add_eot=True):
+    # Remove stray BOM
+    if c and c[0] == u"\ufeff":
+        c = c[1:]
+
+    c = c.replace("\r\n", "\n").replace("\r", "\n").replace("\t", " " * 8)
+
+    if add_eot and not c.endswith("\x03"):
+        c += u"\x03"
+    return c
+
+
 

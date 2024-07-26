@@ -1,0 +1,345 @@
+<!doctype html>
+
+<html>
+
+<head>
+    <meta charset="utf-8">
+
+    <title>Text Editor</title>
+    <link rel="stylesheet" href="css/style.css" type="text/css" />
+    <link rel="stylesheet" title="colorTheme" href="css/color-light.css" type="text/css" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+        crossorigin="anonymous">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp"
+        crossorigin="anonymous">
+    <link rel="stylesheet" href="codemirror/lib/codemirror.css" />
+    <link rel="stylesheet" href="codemirror/theme/monokai.css" />
+    <link rel="shortcut icon" href="favicon.ico" />
+    <!-- get rid of the favicon error-->
+    <script src="codemirror/lib/codemirror.js"></script>
+    <script src="codemirror/addon/search/searchcursor.js"></script>
+    <script src="codemirror/mode/bookish/typo.js"></script>
+    <script src="codemirror/mode/bookish/bookish.js"></script>
+</head>
+
+<body>
+    <!--Top Navigation Bar-->
+    <div class="navbarWrap">
+        <nav class="navbar">
+            <div class="container-fluid">
+                <ul class="nav navbar-nav">
+                    <li class="dropdown">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">File<span class="caret"></span></a>
+                        <ul class="dropdown-menu" role="menu">
+                            <li class="containsSubMenu">
+                                <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">New</a>
+                                <ul class="dropdown-menu dropdown-submenu" role="menu">
+                                    <li class="containsSubMenu">
+                                        <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">File</a>
+                                        <ul class="dropdown-menu dropdown-submenu" role="menu">
+                                            <li><a href="#" class="fileMenu_new_file">Blank File</a></li>
+                                        </ul>
+                                    </li>
+                                    <li><a href="#" class="fileMenu_new_dir">Directory</a></li>
+                                </ul>
+                            </li>
+                            <li><a href="#" class="fileMenu_save">Save</a></li>
+                            <li><a href="#" class="fileMenu_history">Load from History</a></li>
+                        </ul>
+                    </li>
+                    <li class="dropdown editMenu">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Edit<span class="caret"></span></a>
+                        <ul class="dropdown-menu">
+                            <li><a href="#" class="editMenu_undo">Undo</a></li>
+                            <li><a href="#" class="editMenu_redo">Redo</a></li>
+                            <li role="separator" class="divider"></li>
+                            <li><a href="#" class="editMenu_find">Find</a></li>
+                            <li><a href="#" class="editMenu_findPrev">Find Previous</a></li>
+                            <li><a href="#" class="editMenu_findNext">Find Next</a></li>
+                            <li><a href="#" class="editMenu_findAll">Find All</a></li>
+                            <li><a href="#" class="editMenu_replace">Replace</a></li>
+                            <li><a href="#" class="editMenu_replaceAll">Replace All</a></li>
+                        </ul>
+                    </li>
+                    <li class="dropdown viewMenu">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">View<span class="caret"></span></a>
+                        <ul class="dropdown-menu">
+                            <li><a href="#" class="viewMenu_file">Toggle File Panel</a></li>
+                            <li><a href="#" class="viewMenu_preview">Toggle Preview Panel</a></li>
+                            <li><a href="#" class="viewMenu_lineNum">Toggle Line Numbers</a></li>
+                            <li class="containsSubMenu">
+                                <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Color Theme</a>
+                                <ul class="dropdown-menu dropdown-submenu" role="menu">
+                                    <li><a href="#" class="colorTheme_light">Light</a></li>
+                                    <li><a href="#" class="colorTheme_dark">Dark</a></li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </li>
+                    <li class="dropdown">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Help<span class="caret"></span></a>
+                        <ul class="dropdown-menu">
+                            <li><a href="#" class="cheatsheetBtn">Markup Cheatsheet</a></li>
+                            <li><a href="#" data-toggle="modal" data-target="#shortcutMenu">Keyboard Shortcut</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+    </div>
+
+    <div class="container-fluid mainContainer">
+        <div class="row">
+            <!--Side Section-->
+            <div class="sideSection col-lg-2 col-md-2 col-sm-4 col-xs-4">
+                <div class="sideSection_breadcrumb" current-path="/">
+                    <ol class="breadcrumb">
+                        <span class="breadcrumb_hide">
+                            <span><a href="#" class="breadcrumb_upper" title="One Level Up">...</a></span>
+                        </span>
+                        <li><a href="#" class="breadcrumb_item" path="/">/</a></li>
+                    </ol>
+                </div>
+                <div id="fileList">
+                    <ul class="directoryList directorySelected">
+
+                    </ul>
+                </div>
+                <div id="recentlyVisited">
+                    <h6>Recently Visited
+                        <span class="glyphicon glyphicon-menu-down" title="Close Visited List"></span>
+                        <span class="eraseVisitedList glyphicon glyphicon-erase" title="Erase visited List"></span>
+                    </h6>
+                    <ul>
+
+                    </ul>
+                </div>
+                <div class="verticalDragBar" drag-top-ignore="navbarWrap" drag-ghost-position="mainContainer" drag-left="sideSection" drag-right="mainSectionWrap">
+
+                </div>
+            </div>
+            <!--Main Section-->
+            <div class="mainSectionWrap col-lg-10 col-md-10 col-sm-8 col-xs-8">
+                <div class="row">
+                    <!--Editor-->
+                    <div class="editorSection col-lg-6 col-md-6 col-sm-12 col-xs-12">
+                        <div class="toolBar">
+                            <span class="toolIcon glyphicon glyphicon-search" title="search"></span>
+                            <span class="toolIcon glyphicon glyphicon-camera" title="link to image"></span>
+                            <span class="toolIcon glyphicon glyphicon-info-sign" title="note"></span>
+                            <span class="toolIcon glyphicon glyphicon glyphicon-plus-sign" title="add icon"></span>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="toolBar_search" placeholder="Search for...">
+                                <span class="input-group-addon">to</span>
+                                <input type="text" class="form-control" id="toolBar_replace" placeholder="Replace by...">
+                                <span class="input-group-btn">
+                                    <button class="btn btn-default toolBar_replaceBtn" type="button"><span class="glyphicon glyphicon glyphicon-pencil" title="replace"></span></button>
+                                <button class="btn btn-default toolBar_prev" type="button"><span class="glyphicon glyphicon glyphicon-arrow-left" title="find Prev"></span></button>
+                                <button class="btn btn-default toolBar_next" type="button"><span class="glyphicon glyphicon glyphicon-arrow-right" title="find Next"></span></button>
+                                <button class="btn btn-default toolBar_case" type="button" title="Match Case">Ab</button>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="titleBar">
+                            <div class="dropdown hiddenTabs">
+                                <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false"><span class="glyphicon glyphicon-option-horizontal"></span></a>
+                                <ul class="hiddenList dropdown-menu" role="menu">
+                                    <li><a href="#" class="closeAllTabs">Close All Tabs</a></li>
+                                </ul>
+                            </div>
+                            <ul class="nav nav-tabs">
+
+                            </ul>
+                        </div>
+                        <div class="editorWrap" id="editorWrap">
+
+                        </div>
+                        <div class="verticalDragBar" drag-left-ignore="sideSection" drag-top-ignore="navbarWrap" drag-ghost-position="mainSectionWrap"
+                            drag-left="editorSection" drag-right="previewSection">
+
+                        </div>
+                    </div>
+                    <!--Preview-->
+                    <div class="previewSection col-lg-6 col-md-6 col-sm-12 col-xs-12">
+                        <div class="previewWrap">
+                            <iframe id="preview"></iframe>
+                            <div class="iframeCover">
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Modals -->
+    <div id="shortcutMenu" class="modal fade" role="dialog">
+        <div class="modal-dialog">
+
+            <!-- Modal content-->
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title">Keyboard Shortcut</h4>
+                </div>
+                <div class="modal-body container">
+                    <table class="table">
+                        <thead class="row">
+                            <th class="col-lg-4 col-md-4 col-sm-4 col-xs-4">Key</th>
+                            <th class="col-lg-8 col-md-8 col-sm-8 col-xs-8">Command</th>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>A</kbd></td>
+                                <td>Select all content in editor</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>F</kbd></td>
+                                <td>Open search tool</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>Shift</kbd>+<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>F</kbd></td>
+                                <td>Open replace tool</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>G</kbd></td>
+                                <td>Search for next match</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>Shift</kbd>+<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>G</kbd></td>
+                                <td>Search for previous match</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>Shift</kbd>+<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>R</kbd></td>
+                                <td>Replace all matches</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Backspace</kbd></td>
+                                <td>Delete the part of the word before the cursor</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>Alt</kbd>+<kbd>Backspace</kbd></td>
+                                <td>Delete the part of the line before the cursor</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>Shift</kbd>+<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Up</kbd></td>
+                                <td>Duplicate current line and insert above</td>
+                            </tr>
+                            <tr>
+                                <td><kbd>Shift</kbd>+<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Down</kbd></td>
+                                <td>Duplicate current line and insert below</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="CloseModifiedTab" class="modal fade" role="dialog">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title">Are you sure?</h4>
+                </div>
+                <div class="modal-body container">
+                    <p>You have unsaved changes on this page, and would lose them once you close this tab.</p>
+                    <p>Are you sure you would like to close this tab without saving the changes?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-success" data-dismiss="modal">Yes</button>
+                    <button type="button" class="btn btn-default" data-dismiss="modal">No</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="DeleteFileConfirm" class="modal fade" role="dialog">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title">Are you sure?</h4>
+                </div>
+                <div class="modal-body container">
+                    <p>Are you sure you would like to delete this file/directory?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-success" data-dismiss="modal">Yes</button>
+                    <button type="button" class="btn btn-default" data-dismiss="modal">No</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="HistorySelectDialog" class="modal fade" role="dialog">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title">Please select the version you would like to load:</h4>
+                </div>
+                <div class="modal-body container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Modified</th>
+                                <th>Id</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-success" data-dismiss="modal">Ok</button>
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="markupCheatsheet row">
+    </div>
+
+    <div class="sideBarRightClick">
+        <ul class="dropdown-menu">
+            <li><a href="#" class="sideBarRightClick_open">Open</a></li>
+            <li><a href="#" class="sideBarRightClick_delete">Delete</a></li>
+            <li><a href="#" class="sideBarRightClick_rename">Rename</a></li>
+            <li class="containsSubMenu">
+                <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Create New File</a>
+                <ul class="dropdown-menu dropdown-submenu" role="menu">
+                    <li><a href="#" class="sideBarRightClick_newFile">Blank File</a></li>
+                </ul>
+            </li>
+            <li><a href="#" class="sideBarRightClick_newDir">Create New Directory</a></li>
+            <li><a href="#" class="sideBarRightClick_root">Set As Root Directory</a></li>
+        </ul>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.1.0.min.js" integrity="sha256-cCueBR6CsyA4/9szpPfrX3s49M9vUU5BgtiJj06wt/s="
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+        crossorigin="anonymous"></script>
+    <script src="js/js-cookie/js.cookie.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/cheatsheet.js"></script>
+    <script src="js/edit.js"></script>
+    <script src="js/insert.js"></script>
+</body>
+
+</html>

@@ -1,3 +1,13 @@
+// Breakpoints
+
+$small-breakpoint: 42rem;
+$medium-breakpoint: 50rem;
+$medium-maxwidth: 60rem;
+$large-breakpoint: 72rem;
+
+$medium-split: 25%;
+$large-split: 20%;
+
 // Text
 
 $bg-color: white;
@@ -9,13 +19,18 @@ $inv-text-color: #aaa;
 $medium-color: #666;
 $inv-medium-color: #999;
 
+$highlight-bg-color: rgb(246, 246, 239);
+$code-color: black;
+$code-bg-color: rgb(246, 246, 246);
+
 // Metrics
 
-$header-height: 32px;
+$toolbar-height: 32px;
 $large-radius: 8px;
 $small-radius: 4px;
 
 $left-rail-width: 10rem;
+$bullet-indent: 2em;
 
 $bubble-arrow-width: 12px;
 $small-arrow-width: 6px;
@@ -25,13 +40,18 @@ $small-arrow-width: 6px;
 $main-color: #f90;
 $accent-color: rgb(66, 160, 164);
 
+$error-color: #f30;
+
 $title-color: $main-color;
 $section-color: $main-color;
 $heading-color: $accent-color;
+$heading-border-color: rgba(0, 0, 0, 0.33);
 
 $link-color: rgb(23, 130, 186);
 $link-visited-color: adjust-color($link-color, $saturation: -20%);
 $link-hover-color: adjust-color($link-color, $lightness: 10%);
+
+$here-bg: #ffe8b1;
 
 $tag-bg: #e0e0e0;
 $tag-fg: #666;
@@ -47,8 +67,8 @@ $inv-pre-bg: black;
 $inv-label-bg: #242424;
 $inv-content-bg: #292929;
 
-$table-border-color: #eee;
-$table-head-color: adjust-color($accent-color, $lightness: 45%, $saturation: -20%);
+$table-border-color: rgba(0, 0, 0, 0.07);
+$table-head-color: rgba(0, 0, 0, 0.12);
 $inv-table-border-color: #333;
 $inv-table-head-color: rgba(255, 255, 255, 0.05);
 
@@ -106,7 +126,7 @@ $colorvariants: (
     "yellow": (
         bright: $yellow,
         light: adjust-color($yellow, $saturation: 100%, $lightness: 42%),
-        dark: adjust-color($yellow, $saturation: -40%, $lightness: -40%),
+        dark: adjust-color($yellow, $saturation: 100%, $lightness: -10%),
     ),
     "purple": (
         bright: $purple,

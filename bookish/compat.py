@@ -1,174 +1,70 @@
 import array
 import sys
 
+import collections
 
-# Run time aliasing of Python2/3 differences
+def b(s):
+    return s.encode("latin-1")
 
-def htmlescape(s, quote=True):
-    # this is html.escape reimplemented with cgi.escape,
-    # so it works for python 2.x, 3.0 and 3.1
-    import cgi
-    s = cgi.escape(s, quote)
-    if quote:
-        # python 3.2 also replaces the single quotes:
-        s = s.replace("'", "&#x27;")
+import io
+BytesIO = io.BytesIO
+callable = lambda o: isinstance(o, collections.Callable)
+exec_ = eval("exec")
+integer_types = (int,)
+iteritems = lambda o: o.items()
+itervalues = lambda o: o.values()
+iterkeys = lambda o: iter(o.keys())
+izip = zip
+long_type = int
+next = next
+import pickle
+from pickle import dumps, loads, dump, load
+StringIO = io.StringIO
+string_type = str
+text_type = str
+bytes_type = bytes
+unichr = chr
+from urllib.request import urlretrieve
+import configparser
+import html.parser as htmlparser
+import urllib.parse as urlparse
+
+def config_get(config, section, name, fallback=None):
+    return config.get(section, name, fallback=fallback)
+
+def config_getboolean(config, section, name, fallback=False):
+    return config.getboolean(section, name, fallback=fallback)
+
+def config_getint(config, section, name, fallback=0):
+    return config.getint(section, name, fallback=fallback)
+
+def byte(num):
+    return bytes((num,))
+
+def u(s):
+    if isinstance(s, bytes):
+        return s.decode("ascii")
     return s
 
-if sys.version_info[0] < 3:
-    PY3 = False
+def with_metaclass(meta, base=object):
+    ns = dict(base=base, meta=meta)
+    exec_("""class _WhooshBase(base, metaclass=meta):
+pass""", ns)
+    return ns["_WhooshBase"]
 
-    def b(s):
-        return s
+xrange = range
+range = range
+zip_ = lambda * args: list(zip(*args))
 
-    import cStringIO as StringIO
-    StringIO = BytesIO = StringIO.StringIO
-    callable = callable
-    integer_types = (int, long)
-    iteritems = lambda o: o.iteritems()
-    itervalues = lambda o: o.itervalues()
-    iterkeys = lambda o: o.iterkeys()
-    from itertools import izip
-    long_type = long
-    next = lambda o: o.next()
-    import cPickle as pickle
-    from cPickle import dumps, loads, dump, load
-    string_type = basestring
-    text_type = unicode
-    bytes_type = str
-    unichr = unichr
-    from urllib import urlretrieve
-    import ConfigParser as configparser
-    import HTMLParser as htmlparser
-    import urlparse
+def memoryview_(source, offset=None, length=None):
+    mv = memoryview(source)
+    if offset or length:
+        return mv[offset:offset + length]
+    else:
+        return mv
 
-    def config_get(config, section, name, fallback=None):
-        try:
-            return config.get(section, name)
-        except configparser.NoOptionError:
-            return fallback
-
-    def config_getboolean(config, section, name, fallback=False):
-        try:
-            return config.getboolean(section, name)
-        except configparser.NoOptionError:
-            return fallback
-
-    def config_getint(config, section, name, fallback=0):
-        try:
-            return config.getint(section, name)
-        except configparser.NoOptionError:
-            return fallback
-
-    def byte(num):
-        return chr(num)
-
-    def u(s):
-        return unicode(s, "unicode_escape")
-
-    def with_metaclass(meta, base=object):
-        class _WhooshBase(base):
-            __metaclass__ = meta
-        return _WhooshBase
-
-    xrange = xrange
-    range = xrange
-    zip_ = zip
-
-    def memoryview_(source, offset=None, length=None):
-        if offset or length:
-            return buffer(source, offset, length)
-        else:
-            return buffer(source)
-
-    def indent(text, prefix, predicate=None):
-        """Adds 'prefix' to the beginning of selected lines in 'text'.
-
-        If 'predicate' is provided, 'prefix' will only be added to the lines
-        where 'predicate(line)' is True. If 'predicate' is not provided,
-        it will default to adding 'prefix' to all non-empty lines that do not
-        consist solely of whitespace characters.
-        """
-        if predicate is None:
-            def predicate(line):
-                return line.strip()
-
-        def prefixed_lines():
-            for line in text.splitlines(True):
-                yield (prefix + line if predicate(line) else line)
-        return ''.join(prefixed_lines())
-
-else:
-    PY3 = True
-    import collections
-
-    def b(s):
-        return s.encode("latin-1")
-
-    import io
-    BytesIO = io.BytesIO
-    callable = lambda o: isinstance(o, collections.Callable)
-    exec_ = eval("exec")
-    integer_types = (int,)
-    iteritems = lambda o: o.items()
-    itervalues = lambda o: o.values()
-    iterkeys = lambda o: iter(o.keys())
-    izip = zip
-    long_type = int
-    next = next
-    import pickle
-    from pickle import dumps, loads, dump, load
-    StringIO = io.StringIO
-    string_type = str
-    text_type = str
-    bytes_type = bytes
-    unichr = chr
-    from urllib.request import urlretrieve
-    import configparser
-    import html.parser as htmlparser
-    import urllib.parse as urlparse
-
-    def config_get(config, section, name, fallback=None):
-        return config.get(section, name, fallback=fallback)
-
-    def config_getboolean(config, section, name, fallback=False):
-        return config.getboolean(section, name, fallback=fallback)
-
-    def config_getint(config, section, name, fallback=0):
-        return config.getint(section, name, fallback=fallback)
-
-    def byte(num):
-        return bytes((num,))
-
-    def u(s):
-        if isinstance(s, bytes):
-            return s.decode("ascii")
-        return s
-
-    def with_metaclass(meta, base=object):
-        ns = dict(base=base, meta=meta)
-        exec_("""class _WhooshBase(base, metaclass=meta):
-    pass""", ns)
-        return ns["_WhooshBase"]
-
-    xrange = range
-    range = range
-    zip_ = lambda * args: list(zip(*args))
-
-    def memoryview_(source, offset=None, length=None):
-        mv = memoryview(source)
-        if offset or length:
-            return mv[offset:offset + length]
-        else:
-            return mv
-
-    from textwrap import indent
-
-    try:
-        # for python >= 3.2, avoid DeprecationWarning for cgi.escape
-        from html import escape as htmlescape
-    except ImportError:
-        pass
-
+from textwrap import indent
+from html import escape as htmlescape
 
 try:
     from time import perf_counter

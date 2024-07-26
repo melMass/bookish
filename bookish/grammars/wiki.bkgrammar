@@ -1,12 +1,17 @@
+import bookish.parser.bootstrap as bs
 import bookish.parser.rules as r
-import bookish.wikipages as w
+import bookish.wiki.wikipages as w
 import bookish.util as util
+
+
+any_ = r.any_
 
 # Literal whitespace matchers
 
-hspace = [ \t]
+hspace = /[ \t]/
+hspaces = /[ \t]*/
 vspace =  "\r\n" | [\r\n]
-space = [ \t\r\n]
+space = /[ \t\r\n]/
 
 # Literal whitespace or punctuation matcher
 
@@ -18,7 +23,7 @@ ws = (hspace | vspace)*
 
 # One or more blank lines
 
-emptylines = (r.linestart hspace* "\n")+
+emptylines = (r.linestart hspaces "\n")+
 
 # Rules for matching changes of indentation
 
@@ -28,20 +33,20 @@ indentdec = emptylines? lstart:nextin ?(nextin < indent)
 
 # Match the start of a line and return the indentation level
 
-lstart = emptylines? r.linestart hspace*:indent -> len(indent)
+lstart = emptylines? r.linestart hspaces:indent -> len(indent)
 
 
 # Numbers, letters, and characters
 
 digit = [0123456789]
-alphachar = r.Any:c ?(c.isalpha()) -> c
+alphachar = any_:c ?(c.isalpha()) -> c
 
 # XML-style character entities, e.g. &#1024;
 
 charhex = "x" <[0123456789abcdefABCDEF]+>:h -> int(h, 16)
 chardec = <digit+>:d -> int(d)
 charnum = (charhex | chardec)
-num_entity = "#" charnum:num -> compat.unichr(num)
+num_entity = "#" charnum:num -> util.unichr(num)
 named_entity = /[A-Za-z]+/:n -> util.decode_named_entity(n)
 entity = "&" (num_entity | named_entity):char ";" -> char
 
@@ -53,40 +58,40 @@ identifier = ~~xchar </[A-Za-z_0-9]+/>
 
 # Typographic niceties - curly apostrophe and quotes, dashes, symbols, etc.
 
-apos = ^alphachar "'" ~~([Ss] | "ll" | "LL" | [Tt] | "nt" | "NT") -> compat.unichr(8217)
-dashes = ~^"-" ("---" | "--"):d ~"-" -> compat.unichr(8212) if len(d) == 3 else compat.unichr(8211)
-arrows =  ("<-" -> compat.unichr(8592)
-           | "->" -> compat.unichr(8594)
-           | "<=" -> compat.unichr(8804)
-           | "=>" -> compat.unichr(8805)
-           | "<=>" -> compat.unichr(8660)
+apos = ^alphachar "'" ~~([Ss] | "ll" | "LL" | [Tt] | "nt" | "NT") -> u"\u2019"
+dashes = ~^"-" ("---" | "--"):d ~"-" -> u"\u2014" if len(d) == 3 else u"\u2013"
+arrows =  ("<-" -> u"\u2190"
+           | "->" -> u"\u2192"
+           | "<=" -> u"\u2264"
+           | "=>" -> u"\u2265"
+           | "<=>" -> u"\u21d4"
            ):c (r.lineend | ~~space) -> ' ' + c
-symbols = ("(c)" -> compat.unichr(169)
-           | "(tm)" -> compat.unichr(8482)
-           | "(r)" -> compat.unichr(174)
+symbols = ("(c)" -> u"\u00a9"
+           | "(tm)" -> u"\u2122"
+           | "(r)" -> u"\u00ae"
            ):c ~~spaceorpunct -> c
-elipsis = "..." -> compat.unichr(8230)
-mult = ^digit "x" ~~(digit | hspace | r.streamend) -> compat.unichr(215)
+elipsis = "..." -> u"\u2026"
+mult = ^digit "x" ~~(digit | hspace | r.streamend) -> u"\u00d7"
 
-# quotes = '"' @('"', inline):tx '"' -> w.span("q", tx)
+quotes = '"' @('"', inline):tx '"' -> w.span("q", tx)
 
 # Union of all the typographic replacements
 
-typog = apos | dashes | arrows | symbols | elipsis | mult
+typog = apos | dashes | arrows | symbols | elipsis | mult | quotes
 
 
 # Non block/span markup
 
 html_comment = "<!--" @("-->") "-->" -> ''
-line_comment = linestart hspace* "//" @(lineend) lineend -> ''
-comment = html_comment | line_comment
+line_comment = >[ /] r.linestart:indent hspace* "//" @(r.lineend) r.lineend -> ""
+comment = >[< /] html_comment | line_comment
 
 # Span markup
 
 wordstart = r.streamstart | ~^r.alphanum
 wordend = r.streamend | ~~~r.alphanum
 
-uisep = space+ ">" space+ -> " " + compat.unichr(9656) + " "
+uisep = space+ ">" space+ -> u" \u25b8 "
 ui = wordstart ~^"_" "__" @(("__" | .(break_)), (uisep | inline)):tx "__" wordend ~~~"_" -> w.span("ui", tx)
 
 var = ~^"<" "<<" @((">>" | .(break_)), inline):tx ">>" ~~~">" -> w.span("var", tx)
@@ -99,15 +104,18 @@ glyph = "+(" <@((")" | .(break_)))>:v ")" -> w.span("link", None, scheme="Glyph"
 
 # Rules for matching embedded XML
 
-attr = ws xname:k "=\"" <(~'"' r.Any)*>:v '"' -> (k, v)
+attr = ws xname:k "=\"" <@('"')>:v '"' -> (k, v)
 attrlist = attr*:attrs -> dict(attrs)
 ctag(n) = "</" xname:name ?(n == name) ">"
 xml = "<" xname:n attrlist:alist ws "/>" -> w.span("xml", '', tag=n, attrs=alist)
-      | "<" xname:n attrlist:alist ws ">" @("</", spans):tx ctag(n) -> w.span("xml", tx, tag=n, attrs=alist)
+      | "<" xname:n attrlist:alist ws ">"
+        ??(_stream.find("</%s>" % _context['n'], _i) >= 0)
+        @(("</"), spans):tx ctag(n)
+        -> w.span("xml", tx, tag=n, attrs=alist)
 
 # Key spans
 
-keyname = <(~(' ' | "))") r.Any)+>
+keyname = <@((' ' | "))"))>
 keys = "(("
        (hspace+ keyname | ~"(" keyname):k
        (hspace* "+" hspace* keyname)*:kk
@@ -124,14 +132,14 @@ link = anonlink | textlink
 
 # Unions of different span matchers (for different content types)
 
-stylespans = comment | entity | xml | var | em | typog | env | code | glyph | .(break_)
+stylespans = comment | entity | xml | var | em | typog | env | code | glyph | link | .(break_)
 spans = comment | entity | xml | link | code | var | ui | strong | em | keys | typog | env | glyph
 inline = spans | .(break_)
 
 
 # Block markup
 
-break_ = r.blockbreak | "\n" ~~starters
+break_ = r.blockbreak | r.streamend | "\n" ~~starters
 
 # "Normal" paragraph, but the "ending" matcher can change the paragraph type
 # based on the last few characters
@@ -153,11 +161,11 @@ bullet_ending = r.streamend
                 | "\n" ~~starters
 
 bullet_body = @(bullet_ending, spans):tx bullet_ending -> tx
-bullet = lstart:indent bullet_start:bwidth bullet_body:tx-> w.block('bullet', indent, tx, blevel=indent+bwidth)
+bullet = lstart:indent bullet_start:bwidth bullet_body:tx -> w.block('bullet', indent, tx, blevel=indent+bwidth)
 ord = lstart:indent ord_start:bwidth bullet_body:tx -> w.block('ord', indent, tx, blevel=indent+bwidth)
 
-divider = lstart:indent "~~" hspace* lineend -> w.block("divider", indent, None)
-sepend = '~'* lineend
+divider = lstart:indent "~~" hspace* r.lineend -> w.block("divider", indent, None)
+sepend = '~'* r.lineend
 sep = lstart:indent '~'{2,}:line @(sepend, stylespans):tx sepend -> w.block("sep", indent, tx, level=len(line))
 
 codeblock = lstart:indent "{{{"
@@ -176,7 +184,7 @@ title = lstart:indent "=" hspace*
         hspace* ("\n" | r.streamend)
         -> w.block("title", indent, supt + tx + subt, level=0)
 
-heading_tag = hspace* "(" <(~")" r.Any)+>:tag ")" -> tag
+heading_tag = hspace* "(" <(~")" r.any_)+>:tag ")" -> tag
 heading = lstart:indent "="{2,}:eqs ?(len(eqs) > 1) hspace*
           @((hspace* "="), stylespans):tx
           hspace* "="{2,}:eqs2 ?(eqs == eqs2)
@@ -185,21 +193,23 @@ heading = lstart:indent "="{2,}:eqs ?(len(eqs) > 1) hspace*
           -> w.block("h", indent, tx, level=len(eqs), id=tag[0] if tag else None, container=True)
 
 section = emptylines?
-          r.linestart '@' identifier:n
+          lstart:indent '@' identifier:n
           hspace*
           @(r.lineend, stylespans):tx
           ('\n' | r.streamend)
-          -> w.block(n + "_section", 0, tx, level=1, role="section", id=n, container=True)
+          -> w.block(n + "_section", indent, tx, level=1, role="section", id=n, container=True)
 
 summary = lstart:indent '"""' @((break_ | '"""'), spans):tx '"""' hspace* break_ -> w.block("summary", indent, tx)
 
-itemtype = ':' identifier?:n ':' -> n[0] if n else None
+itemname = identifier?:n -> n[0] if n else None
+itemext = hspace+ (bs.dqstring | @(':', bs.escchar)):s -> ''.join(s)
+itemtype = ':' itemname:n (?(n) itemext)?:ext ':' -> (n, ext[0] if ext else None)
 itemend = ':'? hspace* break_
 item = lstart:indent
        itemtype:it
        @(itemend, spans):tx
        itemend
-       -> w.block(it or "item", indent, tx, role="item")
+       -> w.block(it[0] or "item", indent, tx, role="item", ext=it[1])
 
 note = lstart:indent
        ("TIP" | "NOTE" | "WARNING"):it ':'
@@ -210,7 +220,7 @@ property = lstart:indent '#' <@([:\n ])>:k ':' hspace*
            <@(r.lineend)>:v r.lineend
            (
                ~~(lstart:nextin ?(nextin > indent))
-               /.*$/:line ?(line.strip()) r.lineend
+               /[^\n]*/:line ?(line.strip()) r.lineend
                -> line
            )*:extras
            emptylines?
@@ -224,34 +234,36 @@ pxml = lstart:indent
 
 # Union of block rules
 
-blocks = codeblock
-         | title
-         | heading
-         | summary
-         | divider
-         | sep
-         | bullet
-         | ord
-         | item
-         | note
-         | property
-         | pxml
-         | section
-         | para
-
+blocks = !!block x(
+            codeblock
+            | title
+            | heading
+            | summary
+            | divider
+            | sep
+            | bullet
+            | ord
+            | item
+            | note
+            | property
+            | pxml
+            | section
+            | para
+            )
 
 # "Starters" for blocks that don't require a blank line above them
 
-starters = r.linestart hspace*
+starters = r.linestart hspaces
            (bullet_start
             | ord_start
             | '=='
             | itemtype
             | "{{{"
             | "~~"
+            | "//"
            )
 
 
 # Main rule
 
-grammar = (blocks*):b ws r.streamend -> b
+grammar = (blocks*):b ws r.streamend -> [blk for blk in b if blk]

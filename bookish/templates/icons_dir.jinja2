@@ -1,0 +1,64 @@
+{% extends "/templates/page_base.jinja2" %}
+
+{% block styles %}
+    {{ super() }}
+    <style>
+        body {
+            background-color: #eee;
+            line-height: 10px;
+        }
+        #icons {
+            padding: 14px;
+        }
+        h2 {
+            clear: both;
+        }
+        .list > div {
+            position: relative;
+            display: inline-block;
+            border: 1px solid rgba(128, 128, 128, 0.25);
+            margin: 8px;
+            padding: 4px;
+        }
+        .list > div > p {
+            position: absolute;
+            bottom: -14px; left: 0;
+            font-size: 12px;
+            margin: 0; padding: 0;
+            display: none;
+        }
+        .list > div:hover > p {
+            display: block;
+        }
+
+        #fixed:checked ~ div > div > img {
+            width: 48px; height: 48px;
+        }
+        #dark:checked ~ div {
+            background-color: #333;
+            color: white;
+        }
+    </style>
+{% endblock %}
+
+{% block body %}
+    <p>
+        <strong>NOTE</strong> icons and icon names are subject to change or
+        removal without notice. Use these at your own risk.
+    </p>
+    <div id="icons">
+        <input id="fixed" type="checkbox" {% if fixed %}checked{% endif %}><label for="fixed">Fixed</label>
+        <input id="dark" type="checkbox" {% if dark %}checked{% endif %}><label for="dark">Dark</label>
+        {% for dirname, names in dirs | dictsort %}
+            <h2>{{ dirname }}</h2>
+            <div class="list">
+            {%- for name in names -%}
+                <div>
+                    <img src="{{ rel(base + dirname + '/' + name + ".svg") }}">
+                    <p>{{ name }}</p>
+                </div>
+            {%- endfor -%}
+            </div>
+        {% endfor %}
+    </div>
+{% endblock %}

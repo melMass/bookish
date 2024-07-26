@@ -1,27 +1,143 @@
-{% extends "/templates/structure.jinja2" %}
+{% extends "page_base.jinja2" %}
+{% import "util.jinja2" as util with context %}
 
-{% block title %}{{ string(docroot.title) }}{% endblock %}
+{% set blocks_to_render = remove_subblocks(docroot, ("title", "summary", "#related", "#replaces")) %}
+{% set pagetoc = find_headings(blocks_to_render, depth=3) %}
+{% set attrs = docroot.attrs | d({}) %}
+{% set display = attrs.display %}
+{% set notoc = has_option(display, "notoc") %}
+{% set related = subblock_by_id(docroot, "related") %}
+{% set replaces = subblock_by_id(docroot, "replaces") %}
+{% set titleblock = first_subblock_of_type(docroot, "title") %}
 
-{% block toc %}
-    <div id="toc">
-        <div class="side-toc">
-            {% if docroot.parents %}
-                {{ render_styles(build_toc(docroot, basepath, maxdepth=2)) }}
-            {% endif %}
-        </div>
-    </div>
-{% endblock %}
-
-{% block rightbar %}
-    {% if editable %}
-    <a class="navbutton fa fa-pencil" href="/_edit{{ paths.basepath(path) }}"></a>
+{% block meta %}
+    {% if docroot.attrs and docroot.attrs.redirect %}
+        <meta http-equiv="refresh" content="0; url={{ rel(docroot.attrs.redirect) }}">
     {% endif %}
 {% endblock %}
 
+{% block scripts %}
+    <script type="text/javascript" src="{{ rel("/static/js/flot/jquery.flot.min.js") }}"></script>
+    <script type="text/javascript" src="{{ rel("/static/js/flot/jquery.flot.resize.min.js") }}"></script>
+    <script type="text/javascript" src="{{ rel("/static/js/search.js") }}"></script>
+    <script type="text/javascript" src="{{ rel("/static/js/page.js") }}"></script>
+    <script type="text/javascript" src="{{ rel("/static/js/filters.js") }}"></script>
+    <script type="text/javascript" src="{{ rel("/static/js/respond.matchmedia.addListener.min.js") }}"></script>
+{% endblock %}
+
+{% block styles %}
+    {{ super() }}
+    <link rel="stylesheet" href="{{ rel("/static/scss/page.css") }}">
+{% endblock %}
+
+{% block title %}{{ render_styles(docroot.title) | striptags | escape }}{% endblock %}
+
 {% block bodyclass -%}
-    {{ docroot.attrs.display }}
+    {{ display }}
+    {% if first_subblock_of_type(docroot, "billboard_group") %}with-billboard{% endif %}
 {%- endblock %}
 
-{% block content %}
-    {{ render_styles(docroot) }}
+{% block main %}
+    <main>
+        <header class="{% if attrs.billboard or attrs.style %}billboard{% endif %}"
+            {% if attrs.billboard or attrs.style %}
+                style="background-image: url('{{ rel(attrs.billboard) }}'); height: {{ attrs.headerheight | default("auto") }}; {{ attrs.style }}"
+            {% endif %}
+        >
+            {% block before_title %}{% endblock %}
+
+            {% block pagetitle %}
+            <div id="title" class="title-content {{ "with-icon" if attrs.icon }}">
+                {% block ancestors %}
+                <p class="ancestors">
+                    {% for ancestor in docroot.parents %}
+                        <a href="{{ rel(paths.basepath(ancestor.path), ".html") }}" class="ancestor">
+                            {{ render_styles(ancestor.title) }}
+                        </a>
+                        <i class="pathsep fa fa-angle-right"></i>
+                    {% endfor %}
+                </p>
+                {% endblock %}
+
+                {%- if attrs.icon -%}
+                    <div class="pageicon">{{ util.print_icon(attrs.icon, cls="icon") }}</div>
+                {%- endif -%}
+                <h1 class="title {{ attrs.status }}" {{ util.print_attributes(titleblock) }}>
+                    {% block titletext %}{{ render_styles(titleblock.text) }}{% endblock %}
+
+                    {%- if attrs and attrs.version %}
+                        <span class="version">{{ attrs.version }}</span>
+                    {% endif %}
+
+                    {% block subtitle %}
+                    {% endblock %}
+                </h1>
+                {% block pagesummary %}
+                {{ render_styles(first_subblock_of_type(docroot, "summary")) }}
+                {% endblock %}
+            </div>
+            {% endblock pagetitle %}
+
+            {% block after_title %}{% endblock %}
+        </header>
+
+        {% for block in functions.subblocks_of_type(docroot, "billboard") %}
+            {% call util.print_billboard(rel(block.attrs.image), height=block.attrs.height, style=block.attrs.style) %}
+                {{ render_styles(block.body) }}
+            {% endcall %}
+        {% endfor %}
+
+        <div id="content">
+            <table id="premeta" class="metatable">
+                {% block premeta %}
+                    {# Mini-TOC #}
+                    {% set showminitoc = attrs.get("minitoc") != "hide" %}
+                    {% if pagetoc | length > 1 %}
+                        {% call util.print_meta_row("On this page", cond=showminitoc) %}
+                            {{ util.print_page_toc(pagetoc, render_styles) }}
+                        {% endcall %}
+                    {% endif %}
+                {% endblock %}
+            </table>
+            <div class="clear"></div>
+
+            {% block before_main %}{% endblock %}
+            {{ render_styles(blocks_to_render) }}
+            {% block after_main %}{% endblock %}
+
+            <table id="postmeta" class="metatable">
+                {% block postmeta %}
+                    {# Related #}
+                    {% call util.print_meta_row("See also", cond=related.body) %}
+                        {{ render_styles(related) }}
+                    {% endcall %}
+
+                    {% if attrs.showtags == "true" and related.tagged %}
+                        {% for tagname, hits in related.tagged | dictsort %}
+                            {% call util.print_meta_row(tagname, glyph="fa-tag") %}
+                                <div class="tagged-list">
+                                    {% for hit in hits %}
+                                        {{ util.print_hit_box(hit, show_icon=False, show_type=False) }}
+                                    {% endfor %}
+                                </div>
+                            {% endcall %}
+                        {% endfor %}
+                    {% endif %}
+                {% endblock %}
+            </table>
+        </div>
+    </main>
+
+    {% if docroot.parents and not notoc %}
+        <div id="toc">
+            {% set parent = docroot.parents[-1] %}
+            {% set attrs = parent.subtopics.attrs %}
+            {% set display = attrs.display if attrs else '' %}
+            <div id="toc-body" class="{{ display }}">
+                <h1><a href="{{ rel(parent.basepath, ".html") }}">{{ render_styles(parent.title) }}</a></h1>
+
+                {{ render_styles(parent.subtopics.body) }}
+            </div>
+        </div>
+    {% endif %}
 {% endblock %}

@@ -1,0 +1,76 @@
+nav {
+  position: fixed;
+  z-index: 10;
+  top: 0;
+  left: 0;
+  width: 100%;
+  min-height: 32px;
+  height: 32px;
+  overflow: hidden;
+  background-color: black;
+  clear: both; }
+
+/* Navbar */
+nav > .left {
+  float: left; }
+
+nav > .right {
+  float: right; }
+
+a.brand {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0; }
+
+a.brand img {
+  vertical-align: middle;
+  height: 28px;
+  margin: 0 0 0 1em;
+  padding: 0; }
+
+nav .navitem, nav .navbutton {
+  display: inline-block;
+  position: relative;
+  top: 0; }
+
+nav .navitem, nav .navbutton {
+  margin: 0 0.5em;
+  padding: 0; }
+
+.navitem:first-child, nav .navbutton:first-child {
+  margin-left: 0; }
+
+.navitem:last-child, nav .navbutton:first-child {
+  margin-right: 0; }
+
+nav .navbutton {
+  min-height: 32px;
+  background-color: transparent;
+  border: none;
+  font: normal normal normal 14px/1 FontAwesome;
+  cursor: pointer;
+  margin: 0 0.25em;
+  padding: 0; }
+
+nav .navbutton, nav .navbutton:visited {
+  color: #999; }
+
+nav .navbutton:hover {
+  background-color: transparent;
+  color: white;
+  text-decoration: none; }
+
+nav a.navbutton {
+  top: 0;
+  padding-top: 8px; }
+
+#q {
+  width: 20em; }
+
+.brandname {
+  font-size: 18px;
+  color: #888; }
+  .brandname a:link, .brandname a:visited, .brandname a:hover {
+    color: white;
+    text-decoration: none; }

@@ -1,25 +1,29 @@
-{% import "/templates/util.jinja2" as util %}
+{% import "util.jinja2" as util with context %}
+
 
 {# Helper macros #}
 
-{% macro print_attributes(block) -%}
-    {%- if block.attrs -%}
-    {%- for key, value in block.attrs.items() %}
-    {{ key }}="{{ string(value) | escape }}"
-    {%- endfor -%}
-    {%- endif -%}
-{%- endmacro %}
+{% if not type_desc %}
+    {% macro type_desc(block) -%}
+    {%- endmacro %}
+{% endif %}
+
+{% if not category_desc %}
+    {% macro category_desc(catname) -%}
+    {%- endmacro %}
+{% endif %}
+
 
 {% macro print_link(href, text, summary='', status='', icon=None, exists=True, cls='') -%}
-<a href="{{ rel(href) }}" class="link {{ status }} {% if not exists %}missing{% endif %} {{ cls }}"
+<a href="{{ rel(href, ".html") }}" class="link {{ status }} {% if exists == False %}missing{% endif %} {{ cls }}"
 {%- if summary %}title="{{ summary }}"{% endif -%}>
-    {%- if icon %}{{ print_icon(icon, cls="linkicon") }}{% endif -%}
+    {%- if icon %}{{ util.print_icon(icon, cls="linkicon") }}{% endif -%}
     {%- if text %}{{ render(text) }}{% else %}{{ href }}{% endif -%}
 </a>
 {%- endmacro %}
 
 {% macro print_dict_link(d) %}
-    {{ print_link(rel(string(d.path)), d.text, ) }}
+    {{ print_link(rel(string(d.path, ".html")), d.text, d.summary, d.status, d.icon) }}
 {% endmacro %}
 
 {% macro print_heading(block, text, cls, level=None, id=None, attrs=None) %}
@@ -27,24 +31,41 @@
     {% set level = level or block.level %}
     {% set text = text or block.text %}
     {% set id = id or block_id(block) %}
+    {% set outer_caller = caller %}
+    {% set labels = attrs.get("labels", "").split(",") %}
 
-    <section class="{{ cls }} {{ attrs.display }}">
-        <h{{ level }} class="label {{ cls }}" id="{{ id }}">
+    <section class="{{ cls }} {{ attrs.display }} {{ attrs.status }}">
+        <h{{ level }} class="label {{ cls }}" id="{{ id }}"
+            data-title="{{ string(text) | striptags | lower | escape }}"
+        >
             {% if attrs.glyph %}<i class="fa {{ attrs.glyph }}"></i>{% endif %}
             {{ render(text) }}
+            {% if labels %}
+                {% for label in labels %}
+                    {% if label.strip() %}
+                        <span class="tag">{{ label }}</span>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+            <span class="headerlink"><a href="#{{ id }}">¶</a></span>
         </h{{ level }}>
         <div {% if id %}id="{{ id }}-body"{% endif %} class="content">
-            {{ caller() }}
+            {% if attrs.filtered == "yes" %}
+                {% call print_filtered(attrs, sortable=False) %}
+                    {{ outer_caller() }}
+                {% endcall %}
+            {% else %}
+                {{ caller() }}
+            {% endif %}
         </div>
     </section>
 {% endmacro %}
 
-
-{% macro print_link_box(render, rel, link) %}
+{% macro print_link_box(link, show_type=True) %}
     {% set fields = link.fields | d({}) %}
-    <a href="{{ rel(link.fullpath or link.value) }}" class="linkbox {% if fields.icon %}withicon{% endif %} {{ link.scheme }}">
+    <a href="{{ rel(link.fullpath or link.value, ".html") }}" class="linkbox {% if fields.icon %}withicon{% endif %} {{ link.scheme }}">
         {%- if fields.icon -%}
-            <img src="{{ rel("/icons/" + fields.icon + ".svg") }}" />
+            {{ util.print_icon(fields.icon, width=24, height=24) }}
         {%- endif -%}
         {% if link.text %}
             {{ render(link.text) }}
@@ -53,254 +74,153 @@
         {% else %}
             {{ link.value }}
         {% endif %}
-        {% if fields.type %}
-            <small>{{ util.type_desc(link.fullpath, fields.type, fields.context) }}</small>
+        {% if show_type %}
+            <small>{{ type_desc(fields, path=link.fullpath) }}</small>
         {% endif %}
     </a>
 {% endmacro %}
 
-{% macro print_svg(href, cls='', title='', width='', height='') -%}
-    <img src="{{ rel(href) }}"
-         {% if cls %}class="{{ cls }}"{% endif %}
-         {% if title %}title="{{ title }}"{% endif %}
-         {% if width or height %}width="{{ width }}" height="{{ height }}"{% endif %}
-    />
-{%- endmacro %}
-
-{% macro print_icon(val, cls='', title='', width='', height='') -%}
-    {% if not val.startswith("/") %}
-        {% set val = "/icons/" + val + ".svg" %}
-    {% endif %}
-    {{- print_svg(val, cls, title, width, height) -}}
-{%- endmacro %}
-
-{% macro print_datum(label, content) %}
-    <div class="data">
-        <p class="label">{{ label }}</p>
-        <div class="content">{{ content }}</div>
-    </div>
+{% macro print_tag(tagname, block) %}
+    <{{ tagname }} {{ util.print_attributes(block) }}>
+        {{- render(block.text) -}}
+    </{{ tagname }}>
 {% endmacro %}
 
-{% macro page_info(doc=None) %}
-    {% set doc = doc or docroot %}
-    {% set attrs = doc.attrs | d({}) %}
-
-    <div class="page-info metadata">
-
-    {% if doc.replacedby %}
-        <div class="data">
-            <p class="label">Replaced by</p>
-            <div class="content">
-                {% for repl in doc.replacedby %}
-                    {{ util.print_hit_box(rel, repl) }}
-                {% endfor %}
-            </div>
-        </div>
-    {% endif %}
-
-    {% if attrs.type == "homclass" and docroot.superclasses %}
-        <div class="data">
-            <p class="label">
-                {% if docroot.superclasses | count > 1 %}Superclasses
-                {% else %}Superclass
+{% macro print_subtopic(href, text, body=None, summary=None, iconpath=None, cls="", tags="", pagetype="", is_here=False) %}
+    <li class="item subtopics_item ind-item {{ cls }} {% if is_here %}here{% endif %} {% if iconpath %}with-icon{% endif %}"
+        data-title="{{ string(text) | striptags | lower | escape }}{% if tags %} {{ tags | lower | escape }}{% endif -%}"
+        {% if tags %}data-tags="{{ tags | lower | escape }}"{% endif -%}
+    >
+        {% if iconpath %}
+            <div class="g">
+                {% if href %}
+                    <a href="{{ href }}">{{ util.print_image(iconpath, cls="icon medium") }}</a>
+                {% else %}
+                    {{ util.print_image(iconpath, cls="icon medium") }}
                 {% endif %}
-            </p>
-            <div class="content">
-            {% for supclass in docroot.superclasses | reverse %}
-                {% if not loop.first %}
-                    <span class="class-sep fa fa-angle-right"></span>
-                {% endif %}
-                <a href="{{ rel(supclass.path) }}">{{ supclass.title }}</a>
-            {% endfor %}
             </div>
-        </div>
-    {% endif %}
-
-    {% if attrs.type == "homclass" and docroot.subclasses %}
-        <div class="data">
-            <p class="label">Subclasses</p>
-            <div class="content">
-            {% for subclass in docroot.subclasses -%}
-                {%- if not loop.first %}, {% endif -%}
-                <a href="{{ rel(subclass.path) }}">{{ subclass.title }}</a>
-            {%- endfor %}
-            </div>
-        </div>
-    {% endif %}
-
-    {% if doc.examplefor %}
-        <div class="data">
-            <p class="label">Example for</p>
-            <div class="content">
-            {{ print_example_for(docroot.examplefor) }}
-            </div>
-        </div>
-    {% endif %}
-
-    {% if doc.examplefile %}
-        {% set egfile = doc.examplefile %}
-        <div class="data">
-            <p class="label">Example file</p>
-            <div class="content">
-            {{ util.print_example_button(doc.examplefile, False) }}
-            {% if egfile.endswith(".otl") or egfile.endswith(".hda") %}
-                {{ util.print_example_button(doc.examplefile, True) }}
-            {% endif %}
-            </div>
-        </div>
-    {% endif %}
-
-    {% if attrs.type == "vex" and attrs.context != "all" %}
-        <div class="data">
-            <p class="label">Contexts</p>
-            <div class="content">
-            {{ attrs.context }}
-            </div>
-        </div>
-    {% endif %}
-
-{#    {% if attrs.tags %}#}
-{#        <div class="data">#}
-{#            <p class="label">Tags</p>#}
-{#            <div class="content taglist">#}
-{#                {% for tag in split_tags(attrs.tags) %}#}
-{#                    <a class="tag" href="{{ rel("/_tag/" + tag) | escape }}">{{ tag }}</a>#}
-{#                {% endfor %}#}
-{#            </div>#}
-{#        </div>#}
-{#    {% endif %}#}
-    </div>
-{% endmacro %}
-
-{% macro print_example_for(examplefor, show_icon=True) %}
-    {% for nodepath in examplefor.split() -%}
-        {%- set hit = searcher.document(path=nodepath) -%}
-        {%- if hit -%}
-            {{ util.print_hit_box(rel, hit, show_icon=show_icon) }}
-        {%- endif -%}
-    {%- endfor %}
-{% endmacro %}
-
-{% macro print_example(href, title, body, examplefile, examplefor=None, launch=True) %}
-    {% set hit = searcher.document(path=examplefor) if examplefor else None %}
-    {% set fortitle = hit.title if hit else "" %}
-
-    <div class="example item" data-title="{{ string(title).lower() }} {{ fortitle.lower() }}" data-examplefor="{{ fortitle }}" data-examplefile="{{ examplefile }}">
-		{% if examplefile %}
-	        <div class="example-buttons">
-	            {{ util.print_example_button(examplefile, False) }}
-	            {% if launch and examplefile.endswith(".otl") or examplefile.endswith(".hda") %}
-	                {{ util.print_example_button(examplefile, True) }}
-	            {% endif %}
-	        </div>
-		{% endif %}
+        {% endif %}
         <p class="label">
             {% if href %}
-                <a href="{{ href }}">{{ render(title) }}</a>
+                <a class="label-text {{ pagetype }}" href="{{ href }}">{{ string(text) }}</a>
             {% else %}
-                {{ render(title) }}
+                <span class="label-text">{{ render(text) }}</span>
             {% endif %}
         </p>
+        {% if summary %}
+            <p class="summary">{{ summary }}</p>
+        {% endif %}
+        {% if body %}
+            <div class="content">
+                {{ render(body) }}
+            </div>
+        {% endif %}
+    </li>
+{% endmacro %}
 
+{% macro print_metadata(name, value, tt=False) %}
+    <div class="data">
+        <div class="label">{{ name }}</div>
         <div class="content">
-            {% if hit %}
-                {{ util.print_hit_box(rel, hit, show_icon=False) }}
-            {% endif %}
-            {% if body %}
-                {% for sub in body %}
-                    {% if sub.type not in ("title", "section", "summary") %}
-                       {{ render(sub) }}
-                    {% endif %}
-                {% endfor %}
-            {% endif %}
+            {% if tt %}<tt>{% endif %}
+            {{ value }}
+            {% if tt %}</tt>{% endif %}
         </div>
     </div>
 {% endmacro %}
 
-{% macro print_example_list(hits) %}
-    <div class="examples">
-        {% for hit in hits %}
-            {{ print_example(rel(hit.path), hit.title, hit.body, hit.examplefile) }}
-        {% endfor %}
+{% macro print_subtopic_dict(d, fields=("tags",), body=None, cls="") %}
+    {% if d.icon %}
+        {% set icon = rel(icon_ref(d.icon)) %}
+    {% else %}
+        {% set icon = None %}
+    {% endif %}
+    {% set is_here = d.path == basepath %}
+    {{
+    print_subtopic(rel(d.path, ".html"), d.title, body, d.summary, iconpath=icon,
+                   cls=d.get("cls", ""), tags=d.tags, pagetype=d.type,
+                   is_here=is_here)
+    }}
+{% endmacro %}
+
+{% macro print_notice(label, head, block, glyph, cls="") %}
+    {% set attrs = block.attrs | d({}) %}
+    {% set glyph = attrs.glyph or glyph %}
+    {% set label = head if string(head).strip() else label %}
+
+    <div class="notice ind-item {{ block.type }} {{ cls }} {{ attrs.display }}">
+        <p class="label"><span class="g fa fa-fw {{ glyph }}"></span>{{ render(label) }}</p>
+        <div class="content">
+            {{ render(block.body) }}
+        </div>
     </div>
 {% endmacro %}
+
+{% macro print_filtered(attrs, sortable) %}
+    {% set fid = attrs.get("id", random_id()) %}
+    {% set sortable = sortable or (attrs.get("sortable") == "true") %}
+
+    {% if attrs.filtered == "no" %}
+        {{ caller() }}
+    {% else %}
+        <div class="filtered" data-sortable="{{ "true" if sortable else "false" }}">
+            <div class="interface">
+                {% if attrs.filters %}
+                    {% set filterlist = attrs.filters.split(",") %}
+                {% endif %}
+                {% for name in filterlist %}
+                    {% set name = name.strip() %}
+                    {% if name != "tags" %}
+                        {% set label = name %}
+                        <select id="{{ fid }}_{{ name }}" class="filter-menu" data-name="{{- name -}}">
+                            <option value="*">{{ label }}</option>
+                        </select>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            <div class="original filtered-body">
+                {{ caller() }}
+            </div>
+        </div>
+    {% endif %}
+{% endmacro %}
+
+{% macro print_list_group(labels, key, hits, filters) %}
+    {% if labels and key in labels %}
+        {% set label = labels[key] %}
+    {% elif key == "_" %}
+        {% set label = "" %}
+    {% else %}
+        {% set label = key %}
+    {% endif %}
+
+    {% call print_heading(None, label, "heading pull left", id=key+"_group", level=2) %}
+        {{ print_list_hits(hits, filters) }}
+    {% endcall %}
+{% endmacro %}
+
+{% macro print_list_hits(hits, fields) %}
+    <ul class="subtopics_item_group item_group">
+    {%- for hit in hits -%}
+        {%- set tc = "here" if hit.is_here else "" -%}
+        {{- print_subtopic_dict(hit, fields) -}}
+    {%- endfor -%}
+    </ul>
+{% endmacro %}
+
 
 {# Rules #}
 
-{% macro title_rule(this) %}
-    {% set attrs = docroot.attrs %}
-    {% set summ = first_subblock_of_type(docroot.body, "summary") %}
-    {% set isbb = attrs.display and "billboard" in attrs.display.split() %}
-    {% set pagetoc = find_headings(docroot) %}
-
-    <div class="title-block"
-        {% if isbb %}style="background-image: url('{{ rel(string(attrs.billboard)) }}')"{% endif %}
-    >
-        <div class="title-content">
-            <p class="parents"><span class="parents-inner">
-                {% for parent in docroot.parents %}
-                    <a href="{{ rel(parent.basepath) }}">{{ render(parent.title) }}</a>
-                    <i class="divider fa fa-angle-right"></i>
-                {% endfor %}
-            </span></p>
-            <h1 class="title {{ attrs.status }}" {{ print_attributes(this) }}>
-                {%- if attrs.icon -%}
-                    {{ print_svg("/icons/" + attrs.icon + ".svg", cls="icon") }}
-                {%- endif -%}
-                {{ render(this.text) }}
-                {%- if attrs and attrs.version %}
-                    <span class="version">{{ attrs.version }}</span>
-                {% endif %}
-                <span class="subtitle">{{ util.page_desc(path, docroot) }}</span>
-            </h1>
-
-            {% if summ %}
-                <p class="summary">{{ render(summ.text) }}</p>
-            {% endif %}
-        </div>
-    </div>
-
-    {% if pagetoc and pagetoc | length > 1 %}
-    <div class="page-toc collapsible">
-        <p class="label">On this page</p>
-        <ul class="content">
-            {% for block in pagetoc %}
-                <li><a href="#{{ block_id(block) }}">
-                    {{- render(block.text) -}}
-                </a></li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-
-    {{ page_info() }}
-{% endmacro %}
-
-{% macro supertitle_rule(this) %}
+{% macro supertitle_rule(this) -%}
 <span class="supertitle">{{ render(this.text) }}</span>
-{% endmacro %}
-{% macro subtitle_rule(this) %}
+{%- endmacro %}
+{% macro subtitle_rule(this) -%}
 <span class="subtitle">{{ render(this.text) }}</span>
-{% endmacro %}
+{%- endmacro %}
 
 {% macro billboard_group_rule(this) %}
-    {{ render(this.body) }}
 {% endmacro %}
 {% macro billboard_rule(this) %}
-    {% set attrs = this.attrs | d({}) %}
-    <div class="billboard {% if attrs.anim %}animated{% endif %}"
-        style="background-image: url('{{ rel(attrs.image) }}')"
-        {% if attrs.anim %}data-static="{{ attrs.image }}" data-anim="{{ attrs.anim }}"{% endif %}
-    >
-        <div class="body">
-            {% if string(this.text).strip() %}
-                <h2 class="label">{{ render(this.text) }}</h2>
-            {% endif %}
-            <div class="content">
-                {{ render(this.body) }}
-            </div>
-        </div>
-    </div>
 {% endmacro %}
 
 {% macro h_rule(this) %}
@@ -316,57 +236,14 @@
 {% endmacro %}
 
 {% macro related_section_rule(this) %}
-    {% call print_heading(this, this.text, "section", level=2) %}
-        <div class="linkboxes">
+    <ul class="relateds">
         {% for link in find_links(this) %}
-            {{ print_link_box(render, rel, link) }}
+            <li class="related">
+                {{ print_link_box(link, show_type=False) }}
+            </li>
         {% endfor %}
-        </div>
-    {% endcall %}
+    </ul>
 {% endmacro %}
-
-{% macro methods_section_rule(this) %}
-    {% set attrs = this.attrs | d({}) %}
-    {% call print_heading(this, this.text, "section", level=2) %}
-        {% call print_filtered(attrs) %}
-            {{ render(this.body) }}
-
-            {% for sup in docroot.superclasses | reverse %}
-                <ul class="superclass-methods">
-                    <ul class="methods_item_group item_group">
-                        {% for meth in sup.methods | sort(attribute="name") %}
-                            {{ homfn(meth, sup=sup, meth=meth) }}
-                        {% endfor %}
-                    </ul>
-                </ul>
-            {% endfor %}
-        {% endcall %}
-    {% endcall %}
-{% endmacro %}
-
-{% macro functions_section_rule(this) %}
-    {% set attrs = this.attrs | d({}) %}
-    {% call print_heading(this, this.text, "section", level=2) %}
-        {% call print_filtered(attrs) %}
-            {{ render(this.body) }}
-        {% endcall %}
-    {% endcall %}
-{% endmacro %}
-
-{% macro examples_section_rule(this) %}
-    {% call print_heading(None, "Examples", "section", id="examples", level=2) %}
-        {{ render(this.body) }}
-
-        {% if this.examples %}
-            {{ print_example_list(this.examples) }}
-        {% endif %}
-        {% if this.usages %}
-            <p>The following examples include this node.</p>
-            {{ print_example_list(this.usages) }}
-        {% endif %}
-    {% endcall %}
-{% endmacro %}
-
 
 {% macro toc_rule(this) %}
     <div id="toccontents">
@@ -375,12 +252,7 @@
 {% endmacro %}
 
 {% macro summary_rule(this) %}
-{% endmacro %}
-
-{% macro print_tag(tagname, block) %}
-    <{{ tagname }} {{ print_attributes(block) }}>
-        {{- render(block.text) -}}
-    </{{ tagname }}>
+    <p class="summary">{{ render(this.text) }}</p>
 {% endmacro %}
 
 {% macro para_rule(this) %}
@@ -388,34 +260,39 @@
 {% endmacro %}
 
 {% macro task_group_rule(this) %}
-<table class="tasks">
-    <tr>
-        <th>To...</th><th>Do this</th>
-    </tr>
-    {{ render(this.body) }}
-</table>
+    <table class="tasks">
+        <tr>
+            <th>To...</th><th>Do this</th>
+        </tr>
+        {{ render(this.body) }}
+    </table>
 {% endmacro %}
 
 {% macro task_rule(this) %}
     {% set look = this.attrs.display if this.attrs %}
     <tr>
-        <td class="task-desc {{ look }}"><p>{{ render(this.text) }}</p></td>
-        <td class="task-howto {{ look }}">{{ render(this.body) }}</td>
+        <td class="label task-desc {{ look }}">
+            <p id="{{ block_id(this) }}">{{ render(this.text) }}</p>
+        </td>
+        <td class="content task-howto {{ look }}">{{ render(this.body) }}</td>
     </tr>
 {% endmacro %}
 
+
+{# Items #}
+
 {% macro item_group_rule(this) %}
-    <ul class="{{ this.type }} item_group">
+    <div class="{{ this.type }} item_group">
         {{ render(this.body) }}
-    </ul>
+    </div>
 {% endmacro %}
 
 {% macro item_rule(this) %}
     {% set status = string(this.attrs.status) if this.attrs %}
     {% set display = string(this.attrs.display) if this.attrs %}
 
-    <li id="{{ block_id(this) }}" class="item {{ this.type }} {{ status }} {{ display }}"
-        data-title="{{ render(this.text) }}"
+    <div id="{{ block_id(this) }}" class="item {{ this.type }} {{ status }} {{ display }}"
+        data-title="{{ string(this.text) | lower | escape }}"
     >
         <div class="label">
             {% if this.attrs and this.attrs.glyph %}
@@ -426,20 +303,6 @@
         <div class="content">
             {{ render(this.body) }}
         </div>
-    </li>
-{% endmacro %}
-
-{% macro parameters_item_group_rule(this) %}
-    <div class="parameters_item_group">
-        {{ render(this.body) }}
-    </div>
-{% endmacro %}
-{% macro parameters_item_rule(this) %}
-    {% set display = string(this.attrs.display) if this.attrs %}
-
-    <div class="item parameters_item">
-        <div class="label">{{ render(this.text) }}</div>
-        <div class="content">{{ render(this.body) }}</div>
     </div>
 {% endmacro %}
 
@@ -447,43 +310,6 @@
     <ul class="{{ this.type }} item_group">
         {{ render(this.body) }}
     </ul>
-{% endmacro %}
-
-{% macro print_subtopic(href, text, body=None, summary=None, icon=None, cls="", tags="") %}
-    <li class="item {{ cls }}" data-title="{{ string(text) | lower | escape }}"
-        {% if tags %}data-tags="{{ tags | lower | escape }}"{% endif -%}
-    >
-        {% if icon %}
-            <div class="subtopic-icon">
-                {% if href %}
-                    <a href="{{ rel(href) }}">{{ print_icon(icon, cls="icon medium") }}</a>
-                {% else %}
-                    {{ print_icon(icon, cls="icon medium") }}
-                {% endif %}
-            </div>
-        {% endif %}
-        <p class="label">
-            {% if href %}
-                <a href="{{ rel(href) }}">{{ render(text) }}</a>
-            {% else %}
-                {{ render(text) }}
-            {% endif %}
-        </p>
-        {% if summary %}
-            <p class="summary">{{ summary }}</p>
-        {% endif %}
-        {% if body %}
-            <div class="content">
-                {{ render(body) }}
-            </div>
-        {% endif %}
-    </li>
-{% endmacro %}
-
-{% macro print_subtopic_dict(d, fields=("tags",), body=None, cls="") %}
-    {% set tc = (" here" if d.is_here else "") + (" ancestor" if d.is_ancestor else "") + (" container" if d.container else "")%}
-
-    {{ print_subtopic(rel(d.path), d.title, body, d.summary, d.icon, d.get("cls", "") + " " + tc, d.tags) }}
 {% endmacro %}
 
 {% macro subtopics_item_rule(this) %}
@@ -495,68 +321,41 @@
         {% set container = fields.container %}
 
         {% if this.attrs and this.attrs.icon %}
-            {% set icon = this.attrs.icon %}
+            {% set icon = rel(icon_ref(this.attrs.icon)) %}
         {% elif link and fields and fields.icon %}
-            {% set icon = fields.icon %}
+            {% set icon = rel(icon_ref(fields.icon)) %}
         {% else %}
             {% set icon = None %}
         {% endif %}
-
-        {% set tc = (" here" if this.is_here else "") + (" ancestor" if this.is_ancestor else "") + (" container" if container else "")%}
-        {{ print_subtopic(None, this.text, this.body, summary=summary, icon=icon, cls=tc, tags=tags) }}
+        {% set is_here = link.fullpath == basepath %}
+        {{
+        print_subtopic(None, this.text, this.body, summary=summary,
+                       iconpath=icon, tags=tags, pagetype=fields.type,
+                       is_here=is_here)
+        }}
     {% endif %}
-{% endmacro %}
-
-{% macro print_metadata(name, value) %}
-    <div class="data">
-        <div class="label">{{ name }}</div><div class="content">{{ value }}</div>
-    </div>
-{% endmacro %}
-
-{% macro properties_section_rule(this) %}
-    {% set attrs = this.attrs | d({}) %}
-    {% call print_heading(this, this.text, "section", level=2) %}
-        {% call print_filtered(attrs) %}
-            {{ render(this.body) }}
-        {% endcall %}
-    {% endcall %}
-{% endmacro %}
-{% macro properties_item_rule(this) %}
-    {% set status = this.attrs.status if this.attrs %}
-    {% set hprop = this.attrs.hprop if this.attrs %}
-    {% set ifdprop = this.attrs.ifdprop if this.attrs %}
-    {% set defval = this.attrs.default if this.attrs %}
-
-    <li class="properties_item item {{ status }}">
-        <p class="label">
-            <a name="{{ hprop }}"></a><a name="{{ ifdprop }}"></a>
-            {{ render(this.text) }}
-        </p>
-        <div class="content">
-            <div class="compact metadata">
-                {% if hprop %}{{ print_metadata("Houdini", hprop) }}{% endif %}
-                {% if ifdprop %}{{ print_metadata("IFD", ifdprop) }}{% endif %}
-                {% if defval %}{{ print_metadata("Default", defval) }}{% endif %}
-            </div>
-            {{ render(this.body) }}
-        </div>
-    </li>
 {% endmacro %}
 
 {% macro env_variables_section_rule(this) %}
     {% set attrs = this.attrs | d({}) %}
     {% call print_heading(this, this.text, "section", level=2) %}
-        {% call print_filtered(attrs) %}
+        {% call print_filtered(attrs, sortable=True) %}
             {{ render(this.body) }}
         {% endcall %}
     {% endcall %}
+{% endmacro %}
+{% macro env_variables_item_group_rule(this) %}
+    <ul>
+        {{ render(this.body) }}
+    </ul>
 {% endmacro %}
 {% macro env_variables_item_rule(this) %}
     {% set status = this.attrs.status if this.attrs %}
     {% set attrs = this.attrs | d({}) %}
 
     <li class="env_variables_item item {{ status }}"
-        data-title="{{ string(this.text).lower() }}"
+        id="{{ string(this.text) | lower }}"
+        data-title="{{ string(this.text) | lower | escape }}"
         {% if attrs.tags %}data-tags="{{ attrs.tags }}"{% endif %}
     >
         <p class="label"><code>{{ render(this.text) }}</code></p>
@@ -564,6 +363,59 @@
             {{ render(this.body) }}
         </div>
     </li>
+{% endmacro %}
+
+{% macro faqs_item_group_rule(this) %}
+    <ul>
+        {{ render(this.body) }}
+    </ul>
+{% endmacro %}
+{% macro faqs_item_rule(this) %}
+    {% set attrs = this.attrs | d({}) %}
+    {% set id = block_id(this) %}
+
+    <li class="faqs_item item collapsible collapsed"
+        id="{{ id }}"
+        data-title="{{ string(this.text) | lower | escape }}"
+        {% if attrs.tags %}data-tags="{{ attrs.tags }}"{% endif %}
+    >
+        <p class="label">
+            {{ render(this.text) }}
+            <span class="headerlink"><a href="#{{ id }}">¶</a></span>
+        </p>
+        <div class="content">
+            {{ render(this.body) }}
+        </div>
+    </li>
+{% endmacro %}
+
+{% macro glossary_section_rule(this) %}
+    {% set attrs = this.attrs | d({}) %}
+    {% call print_heading(this, this.text, "section", level=2) %}
+        {% call print_filtered(attrs, sortable=False) %}
+            {{ render(this.body) }}
+        {% endcall %}
+    {% endcall %}
+{% endmacro %}
+{% macro glossary_item_group_rule(this) %}
+    <div class="glossary_item_group">
+        {{ render(this.body) }}
+    </div>
+{% endmacro %}
+{% macro glossary_item_rule(this) %}
+    {% set status = this.attrs.status if this.attrs %}
+    {% set attrs = this.attrs | d({}) %}
+
+    <div class="glossary_item item {{ status }}"
+        id="{{ block_id(this) }}"
+        data-title="{{ string(this.text) | lower | escape }}"
+        {% if attrs.tags %}data-tags="{{ attrs.tags }}"{% endif %}
+    >
+        <p class="label"><a href="#{{block_id(this)}}">{{ render(this.text) }}</a></p>
+        <div class="content">
+            {{ render(this.body) }}
+        </div>
+    </div>
 {% endmacro %}
 
 {% macro bullet_group_rule(this) %}
@@ -575,14 +427,14 @@
 {% macro bullet_rule(this) %}
     {% set glyph = this.attrs.glyph if this.attrs else None %}
 
-    <li class="bullet {{ this.attrs.display if this.attrs }} {% if glyph %}glyphed{% endif %}">
+    <li class="bullet {{ this.attrs.display if this.attrs }} {% if glyph %}with-glyph{% endif %}">
         {% if glyph %}
         <p class="g">
             <i class="fa fa-fw {{ this.attrs.glyph }}"></i>
         </p>
         {% endif %}
 
-        <p class="label" {{ print_attributes(this) }}>
+        <p class="label" {{ util.print_attributes(this) }}>
             {{- render(this.text) -}}
         </p>
         {% if this.body %}
@@ -615,40 +467,30 @@
 {% macro dt_rule(this) %}
     {% set attrs = this.attrs | d({}) %}
     {% set glyph = attrs.glyph %}
-    <div class="def {{ attrs.display | d('') }}">
-        {%- if glyph %}
-            <span class="g"><i class="fa fa-fw {{ this.attrs.glyph }}"></i></span>
-        {% endif -%}
-        <div class="label {% if glyph %}withglyph{% endif %}">{{ render(this.text) }}</div>
+    <div id="{{ block_id(this) }}" class="def {{ attrs.status }} {{ attrs.display | d('') }}">
+        <p class="label {% if glyph %}with-glyph{% endif %}">
+            {%- if glyph %}
+                <span class="fa fa-fw {{ this.attrs.glyph }}"></span>
+            {% endif -%}
+            {{ render(this.text) }}
+        </p>
         <div class="content">
             {{- render(this.body) -}}
         </div>
     </div>
 {% endmacro %}
 
-{% macro print_notice(label, head, block, glyph, cls="") %}
-    {% set attrs = block.attrs | d({}) %}
-    {% set glyph = attrs.glyph or glyph %}
 
-    <div class="notice {{ block.type }} {{ cls }} {{ attrs.display }}">
-        <p class="label">
-            <span class="notice-glyph fa fa-fw {{ glyph }}"></span><span>{{ label }}</span>
-        </p>
-        <div class="content">
-            {% if string(head).strip() %}<p>{{ render(head) }}</p>{% endif %}
-            {{ render(block.body) }}
-        </div>
-    </div>
-{% endmacro %}
+{# Notices #}
 
 {% macro tip_group_rule(this) %}
-    <div class="notices">{{ render(this.body) }}</div>
+    <div class="notices ind-group">{{ render(this.body) }}</div>
 {% endmacro %}
 {% macro note_group_rule(this) %}
-    <div class="notices">{{ render(this.body) }}</div>
+    <div class="notices ind-group">{{ render(this.body) }}</div>
 {% endmacro %}
 {% macro warning_group_rule(this) %}
-    <div class="notices">{{ render(this.body) }}</div>
+    <div class="notices ind-group">{{ render(this.body) }}</div>
 {% endmacro %}
 
 {% macro note_rule(this) %}
@@ -661,25 +503,6 @@
     {{ print_notice("Warning", this.text, this, "fa-exclamation-triangle") }}
 {% endmacro %}
 
-{% macro new_group_rule(this) %}
-    <div class="notices">{{ render(this.body) }}</div>
-{% endmacro %}
-{% macro changed_group_rule(this) %}
-    <div class="notices">{{ render(this.body) }}</div>
-{% endmacro %}
-{% macro dev_group_rule(this) %}
-    <div class="notices">{{ render(this.body) }}</div>
-{% endmacro %}
-{% macro fixed_group_rule(this) %}
-    <div class="notices">{{ render(this.body) }}</div>
-{% endmacro %}
-{% macro bug_group_rule(this) %}
-    <div class="notices">{{ render(this.body) }}</div>
-{% endmacro %}
-{% macro platform_group_rule(this) %}
-    <div class="notices">{{ render(this.body) }}</div>
-{% endmacro %}
-
 {% macro new_rule(this) %}
     {{ print_notice("New", this.text, this, "fa-star") }}
 {% endmacro %}
@@ -689,11 +512,19 @@
 {% macro dev_rule(this) %}
     {{ print_notice("Developer", this.text, this, "fa-flask") }}
 {% endmacro %}
+{% macro improved_rule(this) %}
+    {{ print_notice("Improved", this.text, this, "fa-line-chart") }}
+{% endmacro %}
 {% macro fixed_rule(this) %}
     {{ print_notice("Fixed", this.text, this, "fa-check-circle") }}
 {% endmacro %}
 {% macro bug_rule(this) %}
     {{ print_notice("Unresolved", this.text, this, "fa-exclamation-circle") }}
+{% endmacro %}
+{% macro beta_rule(this) %}
+    <div class="beta" style="background-image: url('{{ rel("/images/beta.svg") }}')">
+        {{ render(this.body) }}
+    </div>
 {% endmacro %}
 
 {% macro platform_rule(this) %}
@@ -708,39 +539,8 @@
     {{ print_notice(string(this.text), None, this, glyph, cls=platform.lower()) }}
 {% endmacro %}
 
-{% macro print_filtered(attrs) %}
-    {% set fid = attrs.get("id", random_id()) %}
 
-    {% if attrs.filtered == "no" %}
-        {{ caller() }}
-    {% else %}
-        <div class="filtered">
-            <div class="filter-controls">
-                <input class="filter-title" autocomplete="off" placeholder="Filter">
-
-                {% if attrs.filters %}
-                    {% set filterlist = attrs.filters.split(",") %}
-                {% else %}
-                    {% set filterlist = ["tags"] %}
-                {% endif %}
-
-                {% for name in filterlist %}
-                    {% set name = name.strip() %}
-                    {% set label = name %}
-                    <span id="{{ fid }}_{{ name }}_control">
-                        <label for="{{ fid }}_{{ name }}">{{ label }}:</label>
-                        <select id="{{ fid }}_{{ name }}" class="filter-menu" data-name="{{- name -}}">
-                            <option value="*"> </option>
-                        </select>
-                    </span>
-                {% endfor %}
-            </div>
-            <div class="filtered-body">
-                {{ caller() }}
-            </div>
-        </div>
-    {% endif %}
-{% endmacro %}
+{# Lists, searches, and filters #}
 
 {% macro filter_rule(this) %}
     {% set attrs = this.attrs | d({}) %}
@@ -749,29 +549,9 @@
     {% endcall %}
 {% endmacro %}
 
-{% macro print_list_hits(hits, fields) %}
-    <ul class="subtopics_item_group item_group">
-    {%- for hit in hits -%}
-        {%- set tc = "here" if hit.is_here else "" -%}
-        {{- print_subtopic_dict(hit, fields) -}}
-    {%- endfor -%}
-    </ul>
+{% macro list_group_rule(this) %}
+    {{ render(this.body) }}
 {% endmacro %}
-
-{% macro print_list_group(labels, key, hits, filters) %}
-    {% if labels and key in labels %}
-        {% set label = labels[key] %}
-    {% elif key == "_" %}
-        {% set label = "" %}
-    {% else %}
-        {% set label = key %}
-    {% endif %}
-
-    {% call print_heading(None, label, "heading pull left", id=key+"_group", level=2) %}
-        {{ print_list_hits(hits, filters) }}
-    {% endcall %}
-{% endmacro %}
-
 {% macro list_rule(this) %}
     {%- set attrs = this.attrs | d({}) -%}
     {%- set filtered = attrs.filtered -%}
@@ -801,71 +581,123 @@
     {% endif %}
 {% endmacro %}
 
-{% macro load_example_group_rule(this) %}
-    <div class="examples">
-        {{ render(this.body) }}
+{% macro search_group_rule(this) %}
+    {{ render(this.body) }}
+{% endmacro %}
+{% macro search_rule(this) %}
+    {%- set attrs = this.attrs | d({}) -%}
+    {%- set blockid = block_id(this) -%}
+
+    <div class="livesearch">
+        <div style="position: relative">
+            <span class="search-button"><i class="fa fa-search"></i></span>
+            <input id="{{ blockid }}"
+                   value="{{ q | escape }}"
+                   data-popup="false"
+                   data-require="{{ attrs.get("require", "") | escape }}"
+                   class="search" placeholder="Search" autocomplete="off"
+            >
+        </div>
+        <div id="{{ blockid }}-results" class="livesearch-results"></div>
     </div>
 {% endmacro %}
-{% macro load_example_rule(this) %}
-    {% set attrs = this.attrs | d({}) %}
-    {% set href = rel(attrs.path) if attrs.path else None %}
-    {{ print_example(href, this.text, this.body, attrs.examplefile, attrs.examplefor) }}
+
+{% macro pre_rule(this) -%}
+    <div class="code-container">{{- format_code(this, pre=True) -}}</div>
+{%- endmacro %}
+
+{% macro literate_rule(this) %}
+    <div class="literate">
+        <div class="code-container">{{- format_code(this, pre=True, linenos=True, code_attr="combined") }}</div>
+        <div class="text-container">
+            {% for pre in subblocks_of_type(this, "pre") %}
+                <div id="{{ pre.id }}" class="textgroup-{{ pre.id }}">
+                    <span class="textgroup-info">{{ pre.startline }} - {{ pre.endline }}</span>
+                    {{ render(pre.body) }}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
 {% endmacro %}
 
-{% macro list_examples_rule(this) %}
-    {% call print_filtered({"filters": "examplefor"}) %}
-        {{ render(this.body) }}
-    {% endcall %}
+{% macro sep_rule(this) %}
+    {% set look = this.attrs.display if this.attrs %}
+    {% set body = this.body %}
+    <div {% if this.attrs and "id" in this.attrs %}id="{{ this.attrs.id }}"{% endif %} class="sep {{ look }} {{ "titled" if string(this.text).strip() else "untitled" }} {{ "container" if body else "empty" }}">
+        <div class="label">{{- render(this.text) -}}</div>
+        {% if body %}
+            <div class="content">
+            {{ render(body) }}
+            </div>
+        {% endif %}
+    </div>
 {% endmacro %}
-{% macro grouped_examples_rule(this) %}
-    {% set hit = searcher.document(path=this.key) if this.key else None %}
-    {% set text = hit.title if hit else this.key %}
-    {% if this.body %}
-        {% call print_heading(this, text, "example-group heading", level=2) %}
-            {{ render(this.body) }}
-        {% endcall %}
-    {% endif %}
+
+{% macro block_def_group_rule(this) %}{% endmacro %}
+{% macro block_def_rule(this) %}{% endmacro %}
+
+
+{# Links #}
+
+{% macro Glyph_link_rule(this) -%}
+    <i class="fa {{ this.value }}"></i>
+{%- endmacro %}
+
+{% macro Bit_link_rule(this) -%}
+    <span class="{{ this.value }} bit">{{ val }}</span>
+{%- endmacro %}
+
+{% macro Icon_link_rule(this) -%}
+    {{- util.print_icon(this.value, cls="icon medium") -}}
+{%- endmacro %}
+{% macro Largeicon_link_rule(this) -%}
+    {{- util.print_icon(this.value, cls="icon large") -}}
+{%- endmacro %}
+{% macro Smallicon_link_rule(this) -%}
+    {{- util.print_icon(this.value, cls="icon small") -}}
+{%- endmacro %}
+
+{% macro Image_link_rule(this) -%}
+    <img class="img-responsive" src="{{ rel(this.value.strip()) }}">
+{%- endmacro %}
+{% macro img_rule(this) %}
+    <img class="img-responsive" src="{{ rel(this.value.strip()) }}">
 {% endmacro %}
+
+{% macro Anim_link_rule(this) -%}
+    {% set static = this.value.replace(".gif", "_poster.gif") %}
+    <img class="animated running"
+         src="{{ rel(this.value) }}"
+         data-static="{{ rel(static) }}"
+         data-anim="{{ rel(this.value) }}"
+    >
+{%- endmacro %}
+
+{% macro Wp_link_rule(this) -%}
+    <a class="wp" href="{{ this.value }}">
+        {{ render(this.text) }}<i class="fa fa-wikipedia-w"></i>
+    </a>
+{%- endmacro %}
+
+{% macro Fold_link_rule(this) -%}
+    <label class="fold-text" for="fold-{{ this.value }}">{{ render(this.text) }}<sup>{{ this.value }}</sup></label>
+{%- endmacro %}
 
 {% macro link_rule(this) -%}
-    {%- set scheme = this.scheme or '' -%}
-    {%- set val = this.value -%}
-    {%- if scheme == "Glyph" -%}
-        <i class="fa {{ val }}"></i>
-    {% elif scheme == "Bit" %}
-        <span class="{{ val }} bit">{{ val }}</span>
-    {%- elif scheme == "Icon" -%}
-        {{- print_icon(val, cls="icon medium") -}}
-    {%- elif scheme == "Largeicon" -%}
-        {{- print_icon(val, cls="icon large") -}}
-    {%- elif scheme == "Smallicon" -%}
-        {{- print_icon(val, cls="icon small") -}}
-    {%- elif scheme == "Image" -%}
-        {% if val.endswith(".svg") %}
-            <img class="img-responsive" src="{{ rel(val) }}">
-        {% else %}
-            <img class="img-responsive" src="{{ rel(val) }}">
-        {% endif %}
-    {% elif scheme == "Anim" %}
-        {% set static = val.replace(".gif", "_poster.gif") %}
-        <img class="animated running"
-             src="{{ rel(val) }}"
-             data-static="{{ rel(static) }}"
-             data-anim="{{ rel(val) }}"
-        >
-    {%- elif scheme == "Wp" -%}
-        <a class="wp" href="http://en.wikipedia.org/wiki/{{ val }}">{{ render(this.text) }}<i class="fa fa-wikipedia-w"></i></a>
-    {%- elif scheme == "Example" -%}
-        {{- util.print_example_button(val, False) -}}
-    {%- elif scheme == "Sticker" -%}
-        <span class="sticker">{{ render(val) }}</span> {{ render(this.text) }}
-    {% elif scheme == "Fold" %}
-        <label id="button-{{ val }}" class="fold-button" for="fold-{{ val }}">{{ val }}</label>
-    {%- else -%}
-        {%- set fields = this.fields | default({}) -%}
-        {{- print_link(this.fullpath or this.value, this.text, fields.summary, fields.status, fields.icon, this.exists, cls=scheme) -}}
-    {%- endif -%}
+    {%- set fields = this.fields | default({}) -%}
+    {{- print_link(this.fullpath or this.value, this.text or this.fallback_text or fields.title, fields.summary, fields.status, fields.icon, this.exists, cls=this.scheme) -}}
 {%- endmacro %}
+
+
+{# Backlink block #}
+
+{% macro backlink_rule(this) %}
+    <li>{{ render(this.text) }}</li>
+{% endmacro %}
+
+
+{# Spans #}
 
 {% macro strong_rule(this) -%}
 <strong>{{ render(this.text) }}</strong>
@@ -883,18 +715,12 @@
 <code>{{- render(this.text) -}}</code>
 {%- endmacro %}
 
-{% macro pre_rule(this) -%}
-    <div class="code-container">
-        {{ format_code(this, pre=True) }}
-    </div>
-{%- endmacro %}
-
 {% macro q_rule(this) -%}
 &ldquo;{{ render(this.text) }}&rdquo;
 {%- endmacro %}
 
 {% macro print_table_cell(cell, tag="td") %}
-    <{{ tag }} {{ print_attributes(cell) }}>
+    <{{ tag }} {{ util.print_attributes(cell) }}>
         {%- if cell.text -%}
             <p>
                 {% if cell.attrs and cell.attrs.glyph %}
@@ -911,7 +737,7 @@
 
 {% macro print_table_rows(rows) %}
     {% for row in rows %}
-    <tr>
+    <tr {{ "class='divider'" if row.divider else "" }}>
         {% for cell in row.body %}
             {% if cell.role == "th" %}
                 {{ print_table_cell(cell, "th") }}
@@ -937,138 +763,153 @@
 {% endmacro %}
 
 {% macro pxml_rule(this) %}
-<{{ this.tag }}{{ print_attributes(this) }}>
+<{{ this.tag }} {{ util.print_attributes(this) }}>
     {{ render(this.text) }}
     {{ render(this.body) }}
 </{{ this.tag }}>
 {% endmacro %}
 
 {% macro xml_rule(this) -%}
-<{{ this.tag }}{{ print_attributes(this) }}>
-    {{- render(this.text) -}}
-</{{ this.tag }}>
+    {% if this.tag in ("br", "img") -%}
+        <{{ this.tag }} {{ util.print_attributes(this) }} />
+    {%- else -%}
+        <{{ this.tag }} {{ util.print_attributes(this) }}>
+            {{- render(this.text) -}}
+        </{{ this.tag }}>
+    {%- endif %}
 {%- endmacro %}
 
 {% macro env_rule(this) -%}
-{{ config.VARS.get(this.name, "") }}
+{{ config.get(this.name, "") }}
 {%- endmacro %}
 
 {% macro var_rule(this) -%}
-    <var>{{ render(this.text) }}</var>
+    &#x2039;<var>{{- render(this.text) -}}</var>&#x203A;
 {%- endmacro %}
 
-{%- macro keys_rule(this) -%}
+{%- macro single_key(keyname) -%}
+    {%- if keyname == "Shift" -%}
+        <kbd>&#8679; Shift</kbd>
+    {%- elif keyname == "Option" -%}
+        <kbd>&#8997; Option</kbd>
+    {%- elif keyname == "Cmd" or keyname == "Command" -%}
+        <kbd>&#8984;</kbd>
+    {%- elif keyname == "Esc" %}
+        <kbd>&#9099; Esc</kbd>
+    {%- elif keyname == "Return" -%}
+        <kbd>&#9166; Return</kbd>
+    {%- elif keyname == "Backspace" -%}
+        <kbd>&#9003; Backspace</kbd>
+    {%- elif keyname == "Del" -%}
+        <kbd>&#8998; Del</kbd>
+    {%- elif keyname == "Ctrl" -%}
+        <kbd>&#8963; Ctrl</kbd>
+    {%- elif keyname == "Up" -%}
+        <kbd>&#8593;</kbd>
+    {%- elif keyname == "Down" -%}
+        <kbd>&#8595;</kbd>
+    {%- elif keyname == "Left" -%}
+        <kbd>&#8592;</kbd>
+    {%- elif keyname == "Right" -%}
+        <kbd>&#8594;</kbd>
+    {%- elif keyname == "Tab" -%}
+        <kbd>&#8677; Tab</kbd>
+    {%- elif keyname in ("LMB", "MMB", "RMB", "mouse", "mouse_wheel",
+                         "Up", "Down", "Left", "Right") -%}
+        {{ util.print_image(rel("/icons/KEYS/" + keyname + ".svg"), title=keyname, cls="keyicon") }}
+    {%- else -%}
+        <kbd>{{ keyname }}</kbd>
+    {%- endif -%}
+{%- endmacro -%}
+
+{%- macro print_keys(keys) -%}
     <span class="keys">
-    {%- for keyname in this['keys'] -%}
-        {%- if keyname == "Shift" -%}
-            <kbd>&#8679; Shift</kbd>
-        {%- elif keyname == "Option" -%}
-            <kbd>&#8997; Option</kbd>
-        {%- elif keyname == "Cmd" or keyname == "Command" -%}
-            <kbd>&#8984;</kbd>
-        {%- elif keyname == "Esc" %}
-            <kbd>&#9099; Esc</kbd>
-        {%- elif keyname == "Return" -%}
-            <kbd>&#9166; Return</kbd>
-        {%- elif keyname == "Backspace" -%}
-            <kbd>&#9003; Backspace</kbd>
-        {%- elif keyname == "Del" -%}
-            <kbd>&#8998; Del</kbd>
-        {%- elif keyname == "Ctrl" -%}
-            <kbd>&#8963; Ctrl</kbd>
-        {%- elif keyname == "Up" -%}
-            <kbd>&#8593;</kbd>
-        {%- elif keyname == "Down" -%}
-            <kbd>&#8595;</kbd>
-        {%- elif keyname == "Left" -%}
-            <kbd>&#8592;</kbd>
-        {%- elif keyname == "Right" -%}
-            <kbd>&#8594;</kbd>
-        {%- elif keyname == "Tab" -%}
-            <kbd>&#8677; Tab</kbd>
-        {%- elif exists("/icons/KEYS/" + keyname + ".svg") -%}
-            {{ print_svg("/icons/KEYS/" + keyname + ".svg", title=keyname, cls="keyicon") }}
-        {%- else -%}
-            <kbd>{{ keyname }}</kbd>
-        {%- endif -%}
-        {% if not loop.last %} + {% endif %}
+    {%- for keyname in keys -%}
+        {{ single_key(keyname) }}
+        {%- if not loop.last %} + {% endif -%}
     {%- endfor -%}
     </span>
+{%- endmacro -%}
+
+{%- macro keys_rule(this) -%}
+    {{ print_keys(this["keys"]) }}
 {%- endmacro %}
 
-{% macro homfn(this, sup=None, meth=None) %}
-    {% set attrs = this.attrs | d({}) %}
-    {% set status = string(attrs.status) %}
-    {% set bid = string(this.text).split("(")[0] %}
-    {% set text = text_replace(this.text, "(self, ", "(") %}
-    {% set text = text_replace(text, "(self)", "()") %}
 
-    <li class="collapsible {% if not preview %}collapsed{% endif %} item" id="{{ bid }}" data-title="{{ string(text) | lower }}" data-tags="{{ attrs.tags }}">
-        <p class="label {{ status }}">
-            {%- if sup -%}
-                <code><a href="{{ rel(sup.path) }}#{{ meth.name }}">{{ sup.title }}</a>.</code>
-            {%- endif -%}
-            {% for span in text -%}
-                {%- if span.type == "code" -%}
-                    <span class="code-container"><code class="codehilite">
-                        {{- format_code(span, lexername="python") -}}
-                    </code></span>
-                {%- else -%}
-                    {{ render(span) }}
-                {%- endif -%}
-            {%- endfor %}
-        </p>
-        <div class="content">
-            {% if this.body %}
-                {{ render(this.body) }}
-            {% elif meth %}
-                <p>
-                    {{ render(meth.summary) }}
-                    {% if meth.more %}
-                        <a href="{{ rel(sup.path) }}#{{ meth.name }}"><span class="fa fa-external-link-square"></span></a>
-                    {% endif %}
+{# Applications #}
+
+{#{% macro toc(root) %}#}
+{#    <div class="parent-div">#}
+{#        <h2 class="parent-title">#}
+{#            <a href="{{ root.fullpath }}">#}
+{#            {{ render(first_subblock_of_type(root.body, "title").text) }}#}
+{#            </a>#}
+{#        </h2>#}
+{#        {{ render(find(root.body, '@role="section".@id="subtopics"')) }}#}
+{#    </div>#}
+{#{% endmacro %}#}
+
+{#{% macro quote_rule(this) %}#}
+{#    <figure class="quote">#}
+{#        <blockquote>{{ render(this.body) }}</blockquote>#}
+{#        <figcaption>{{ render(this.text) }}</figcaption>#}
+{#    </figure>#}
+{#{% endmacro %}#}
+
+{% macro flow_rule(this) %}
+    {% set attrs = this.attrs | default({}) %}
+    {% set links = docroot.flow_links %}
+    {% set indx = docroot.flow_index | default(0) | int %}
+    {% set numlinks = links | length %}
+
+    <div class="flow-controls {{ this.display }}" style="{{ this.style }}">
+        {% if attrs.hide_title != "true" %}
+            <p class="label">{{ render(docroot.flow_title) }}</p>
+        {% endif %}
+        {% if attrs.show == "list" %}
+            <ul>
+            {% for link in links %}
+                {% if attrs.hide_self != "true" or loop.index0 != indx %}
+                    <li>{{ render(link) }}</li>
+                {% endif %}
+            {% endfor %}
+            </ul>
+        {% else %}
+            {% if docroot.previous %}
+                <p class="prev-link">
+                    {{ render(docroot.previous) }}
                 </p>
-            {% elif status == "ni" %}
-                <p class="ni-message">This method is not yet implemented.</p>
-            {% elif status == "nd" %}
-                <p class="nd-message">This method is not yet documented.</p>
             {% endif %}
-        </div>
-        <div class="collapsed-content">
-            {{ subblocks_summary(this) }}
-        </div>
-    </li>
-{% endmacro %}
-
-{% macro methods_item_rule(this) %}
-    {{ homfn(this) }}
-{% endmacro %}
-
-{% macro functions_item_rule(this) %}
-    {{ homfn(this) }}
-{% endmacro %}
-
-{% macro toc(root) %}
-    <div class="parent-div">
-        <h2 class="parent-title">
-            <a href="{{ root.fullpath }}">
-            {{ render(first_subblock_of_type(root.body, "title").text) }}
-            </a>
-        </h2>
-        {{ render(find(root.body, '@role="section".@id="subtopics"')) }}
+            {% if links %}
+                <p class="selector">
+                    <label for="select_{{ block_id(this) }}">{{ render(this.title) }}</label>
+                    <select id="select_{{ block_id(this) }}" onchange="window.location=this.value">
+                        {% for link in links %}
+                            <option value="{{ rel(link.fullpath) }}" {{ "selected" if loop.index == indx + 1 }}>{{ string(link) }}</option>
+                        {% endfor %}
+                    </select>
+                </p>
+            {% endif %}
+            {% if docroot.next %}
+                <p class="next-link">
+                    {{ render(docroot.next) }}
+                </p>
+            {% endif %}
+        {% endif %}
     </div>
 {% endmacro %}
 
 {% macro col_group_rule(this) %}
     {% set subcount = this.body | length %}
 
-    <div class="row sizing">
+    <div class="row">
         {%- for item in this.body -%}
             {%- set attrs = item.attrs | d({}) -%}
-            <div class="col col_1_of_{{ subcount }} {{ attrs.display }}" {{ print_attributes(item) }}>
+            <div class="col col_1_of_{{ subcount }} {{ attrs.display }}" {{ util.print_attributes(item) }}>
                 {{ render(item.body) }}
             </div>
         {%- endfor -%}
+        <div class="clear"></div>
     </div>
 {% endmacro %}
 
@@ -1109,44 +950,39 @@
     </div>
 {% endmacro %}
 
-{% macro quote_rule(this) %}
-    <figure class="quote">
-        <blockquote>{{ render(this.body) }}</blockquote>
-        <figcaption>{{ render(this.text) }}</figcaption>
-    </figure>
-{% endmacro %}
-
-{% macro sep_rule(this) %}
-    {% set look = this.attrs.display if this.attrs %}
-    <div class="sep {{ look }} {% if string(this.text).strip() %}titled{% endif %}">
-        {{- render(this.text) -}}
-    </div>
-{% endmacro %}
-
-{% macro rail_group_rule(this) %}
-    {{ render(this.body) }}
-{% endmacro %}
-{% macro rail_rule(this) %}
-    <div class="rail {{ this.attrs.display if this.attrs }}">
-        <p class="label">{{ render(this.text) }}</p>
-        <div class="content">{{ render(this.body) }}</div>
-    </div>
-{% endmacro %}
-
-{# Applications #}
-
 {% macro fig_group_rule(this) %}
     {{ render(this.body) }}
 {% endmacro %}
 
 {% macro fig_rule(this) %}
-    <div class="fig"><div class="figure-body">
-            {{ render(this.body) }}
-        </div><div class="figure-img">
+    {% set summ = first_subblock_of_type(this.body, "summary") %}
+    {% set body = remove_subblocks(this.body, ("summary",)) %}
+    {% set attrs = this.get("attrs", {}) %}
+    {% set nobody = "" if body else "nobody" %}
+
+    <div class="fig {{ attrs.display }} {{ nobody }}">
+        <div class="figure-img">
             <figure class="unzoomed">
-                {{ render(this.text) }}
+                {{- render(this.text) -}}
+                {%- if summ -%}
+                    <figcaption>{{ render(summ.text) }}</figcaption>
+                {%- endif -%}
             </figure>
-    </div></div>
+        </div>
+        {% if body %}
+            <div class="figure-body content">
+                {{ render(body) }}
+            </div>
+        {% endif %}
+        <div class="clear"></div>
+    </div>
+{% endmacro %}
+
+{% macro picture_group_rule(this) %}
+    <table class="pictures">
+        {% for pic in this.body %}
+        {% endfor %}
+    </table>
 {% endmacro %}
 
 {% macro tshoot_group_rule(this) %}
@@ -1186,56 +1022,27 @@
     </table>
 {% endmacro %}
 
-{% macro pageref_group_rule(this) %}
-    <div class="pagerefs">
-        {{ render(this.body) }}
-    </div>
-{% endmacro %}
-{% macro pageref_rule(this) %}
-    {% set link = first_span_of_type(this.text, "link") %}
-    {% if link %}
-        {% set fields = link.fields %}
-        <div>
-            <div class="gi">
-                {{ print_icon(fields.icon) }}
-            </div>
-            <p class="label">{{ print_link(link.fullpath, fields.title) }}</p>
-            <div class="content">
-                {{ fields.summary }}
-            </div>
-        </div>
-    {% endif %}
-{% endmacro %}
-
-
-{% macro box_group_rule(this) %}
-    {{ render(this.body) }}
-{% endmacro %}
 {% macro box_rule(this) %}
     {% set attrs = this.attrs | d({}) %}
     {% if attrs.fold %}
-        {% set fold = this.attrs.fold %}
+        <input type="checkbox" class="fold-state" name="fold-{{ attrs.fold }}" id="fold-{{ attrs.fold }}">
     {% endif %}
 
-    {% if fold %}
-        <input type="checkbox" class="fold-state" name="fold-{{ fold }}" id="fold-{{ fold }}">
+    {% if string(this.text).strip() %}
+        <p class="box-label">{{ render(this.text) }}</p>
     {% endif %}
-
-    <div class="box">
-        {% if string(this.text).strip() %}
-            <p class="label">{{ render(this.text) }}</p>
+    <div class="box {{ attrs.display }} {% if attrs.fold %}foldable folded{% endif %}" {% if attrs.style %}style="{{ attrs.style }}"{% endif %}>
+        {% if attrs.fold %}
+            <label class="fold-return" for="fold-{{ attrs.fold }}">{{ attrs.fold }}</label>
         {% endif %}
-        <div class="content {{ attrs.display }}">
-            {% if fold %}
-                <label class="fold-return" for="fold-{{ fold }}"><i class="fa fa-close"></i></label>
-            {% endif %}
+        <div class="content">
             {{ render(this.body) }}
         </div>
     </div>
 {% endmacro %}
 
-{% macro caption_rule(this) %}
-    <div class="caption-box {{ attrs.display if attrs and attrs.display else '' }}">
+{% macro disclosure_rule(this) %}
+    <div class="disclosure collapsible collapsed">
         <p class="label">{{ render(this.text) }}</p>
         <div class="content">
             {{ render(this.body) }}
@@ -1256,11 +1063,46 @@
     </div>
 {% endmacro %}
 
+{% macro gloss_rule(this) %}
+    <div class="gloss">
+        <p class="label"><strong>{{ render(this.text) }}</strong></p>
+        <div class="content">
+            {{ render(this.body) }}
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro video_group_rule(this) %}
+    {{ render(this.body) }}
+{% endmacro %}
+{% macro video_rule(this) %}
+    {% set attrs = this.attrs | d({}) %}
+    {% set summ = first_subblock_of_type(this.body, "summary") %}
+    <figure>
+        <video
+            src="{{ rel(attrs.src) }}"
+            type="{{ attrs.get("type", "video/mp4") }}"
+            controls="{{ attrs.get("controls", "controls") }}"
+            {% if attrs.loop == "true" %}loop{% endif %}
+            {% if attrs.autoplay == "true" %}autoplay{% endif %}
+            class="img-responsive {{ attrs.get("display", "") }}"
+        ></video>
+        {%- if summ -%}
+            <figcaption>{{ render(summ.text) }}</figcaption>
+        {%- endif -%}
+    </figure>
+{% endmacro %}
+
+{% macro vimeo_group_rule(this) %}
+    {{ render(this.body) }}
+{% endmacro %}
 {% macro vimeo_rule(this) %}
     {% set attrs = this.attrs | d({}) %}
-    {% set url = "http://player.vimeo.com/video/" + string(attrs.id) %}
-    <div class="video-container" title="{{ string(this.text) }}">
-        <iframe src="{{ url }}"
+    {% set url = "https://player.vimeo.com/video/" + string(attrs.id) %}
+    <div id="{{ attrs.id }}" class="video-container" title="{{ string(this.text) }}">
+        <iframe src="{{ url | escape }}"
+            data-vimeo-id="{{ attrs.id | escape }}"
+            title="{{ string(this.text) | escape }}"
             class="vimeo video"
             frameborder="0"
             webkitallowfullscreen mozallowfullscreen allowfullscreen
@@ -1271,7 +1113,7 @@
 {% macro vimeo_ref_rule(this) %}
     {% set attrs = this.attrs | d({}) %}
     {% set vid = string(attrs.id).strip() %}
-    {% set url = "http://vimeo.com/video/" + vid %}
+    {% set url = "https://vimeo.com/" + vid %}
     {% set glyph = attrs.get("glyph", "fa-film") %}
 
     <div class="vimeo-reference" data-vid="{{ vid }}">
@@ -1303,8 +1145,34 @@
     </table>
 {% endmacro %}
 
+{% macro imagegrid_rule(this) %}
+    <div class="image-grid">
+        {{ render(this.body) }}
+    </div>
+{% endmacro %}
+
+{% macro compare_images_rule(this) %}
+    {% set attrs = this.get("attrs", {}) %}
+    {% set summ = first_subblock_of_type(this.body, "summary") %}
+    {% set body = remove_subblocks(this.body, ("summary",)) %}
+    <figure class="compare-img">
+        <div class="image-comparison">
+            <img class="img2" src="{{ rel(attrs.image2) }}" />
+            <img class="img1" src="{{ rel(attrs.image1) }}" />
+        </div>
+        {%- if summ -%}
+            <figcaption>{{ render(summ.text) }}</figcaption>
+        {%- endif -%}
+    </figure>
+{% endmacro %}
+
+{% macro span_rule(this) -%}
+<span class="{{ this.class }}">{{ render(this.text) }}</span>
+{%- endmacro %}
+
 {# Root #}
 
 {% macro root_rule(this) %}
     {{ render(this.body) }}
 {% endmacro %}
+

@@ -1,0 +1,603 @@
+html, body {
+    height: 100%;
+}
+
+a:hover, a:focus {
+    text-decoration: none!important;
+}
+
+
+/* Navbar */
+
+.navbarWrap {
+    position: fixed;
+    z-index: 2;
+    width: 100%;
+}
+
+.navbar {
+    margin-bottom: 0px!important;
+    min-height: 20px!important;
+    border-width: 0px 0px 1px 0px!important;
+    border-radius: 0px!important;
+}
+
+.navbar-nav {
+    margin: 0px 0px!important;
+    width: 100%;
+}
+
+.navbar-nav > li {
+    float: left;
+}
+
+.navbar-nav > li.search_field {
+    float: right;
+    position: relative;
+    right: 25px;
+    top: 3px;
+}
+
+.navbar-nav > li.search_field input {
+    padding-left: 30px!important;
+}
+
+.navbar > .container-fluid, .navbar > .container-fluid > .navbar-collapse {
+    padding: 0px!important;
+}
+
+li.dropdown > a {
+    padding: 10px!important;
+}
+
+.navbar a.fileMenu_export+input {
+    display: none;
+}
+
+.form-control-feedback {
+    left: 0;
+    color: gray;
+}
+
+
+/* Add Submenu Functionality to Navbar Dropdown*/
+
+.containsSubMenu:hover > ul.dropdown-menu {
+    display: block;
+}
+
+.dropdown-submenu {
+    left: 140px!important;
+    margin: 0px!important;
+    border-top-left-radius: 0!important;
+    border-top-right-radius: 0!important;
+}
+
+
+/* fileList */
+
+.mainContainer {
+    height: 100%;
+    position: fixed;
+    width: 100%;
+    padding: 41px 0px 0px 0px!important;
+}
+
+.mainContainer .row {
+    height: 100%;
+    margin: 0px!important;
+}
+
+
+/* Side Section */
+
+.mainContainer .sideSection {
+    height: 100%;
+    padding: 0px!important;
+    margin-right: -1px;
+    border-right: 1px solid;
+}
+
+.mainContainer .sideSection #fileList {
+    clear: both;
+    height: 60%;
+    overflow-y: auto;
+    border-bottom: 1px solid;
+}
+
+.mainContainer .sideSection .sideSection_breadcrumb {
+    height: 25px;
+    width: 100%;
+}
+
+.mainContainer .sideSection .breadcrumb {
+    padding: 2px 5px;
+    margin-bottom: 0px;
+}
+
+.mainContainer .sideSection .breadcrumb_hide > span {
+    border: 1px solid;
+    padding: 2px;
+}
+
+.mainContainer .sideSection .breadcrumb_hide > span:last-child {
+    display: none;
+}
+
+.mainContainer .sideSection .breadcrumb > li {
+    display: inline;
+}
+
+.mainContainer .sideSection .breadcrumb > li:only-of-type {
+    display: none;
+}
+
+.mainContainer .sideSection .breadcrumb > span.breadcrumb_hide li {
+    display: none;
+}
+
+.mainContainer .sideSection .breadcrumb > li + li:before {
+    content: ">"
+}
+
+.mainContainer .sideSection #recentlyVisited {
+    clear: both;
+    height: 40%;
+}
+
+.mainContainer .sideSection #fileList ul {
+    list-style-type: none;
+    padding-left: 0px!important;
+}
+
+.mainContainer .sideSection #fileList li[indent="1"] a {
+    padding-left: 32px;
+}
+
+.mainContainer .sideSection #fileList li[indent="2"] a {
+    padding-left: 52px;
+}
+
+.mainContainer .sideSection #fileList li[indent="3"] a {
+    padding-left: 72px;
+}
+
+.mainContainer .sideSection #fileList li[indent="4"] a {
+    padding-left: 92px;
+}
+
+.mainContainer .sideSection .newFileEntry {
+    border-bottom: 1px solid;
+}
+
+.mainContainer .sideSection #recentlyVisited h6 {
+    padding: 6px 10px;
+    margin: 0px;
+    font-weight: 700;
+}
+
+.mainContainer .sideSection #recentlyVisited h6 span {
+    float: right;
+    margin: 0px 4px;
+    cursor: pointer;
+}
+
+.mainContainer .sideSection #recentlyVisited ul {
+    padding: 0px;
+    list-style: none;
+}
+
+.mainContainer .sideSection #recentlyVisited ul a {
+    display: block;
+}
+
+.mainContainer .sideSection #fileList li a, .mainContainer .sideSection #recentlyVisited li {
+    padding: 6px 0px 6px 12px;
+    display: block;
+    border-bottom: 1px solid;
+}
+
+.mainContainer .sideSection #fileList li .glyphicon, .mainContainer .sideSection #recentlyVisited li .glyphicon {
+    margin-right: 8px;
+    display: inline;
+}
+
+.mainSectionWrap {
+    height: 100%!important;
+    padding: 0px!important;
+}
+
+.mainSectionWrap .row {
+    height: 100%;
+}
+
+
+/* Editor Section */
+
+.mainContainer .editorSection {
+    padding: 0px!important;
+}
+
+.mainContainer .editorSection .toolBar {
+    height: 25px;
+    line-height: 25px;
+    border-bottom: 1px solid;
+    border-left: 1px solid;
+    padding: 0px 20px;
+}
+
+.mainContainer .editorSection .toolBar .input-group {
+    width: 35%;
+    display: none;
+    top: -1px;
+    float: right;
+}
+
+.mainContainer .editorSection .toolBar .input-group.searchMode {
+    display: table;
+}
+
+.mainContainer .editorSection .toolBar .input-group .input-group-addon {
+    padding: 4px 8px;
+    border-collapse: collapse;
+    font-size: 12px;
+    display: none;
+}
+
+.mainContainer .editorSection .input-group.replaceMode {
+    width: 55%;
+}
+
+.mainContainer .editorSection .replaceMode .input-group-addon, .mainContainer .editorSection .replaceMode #toolBar_replace {
+    display: table-cell!important;
+}
+
+.mainContainer .editorSection .toolBar #toolBar_replace {
+    display: none;
+}
+
+.mainContainer .editorSection .toolBar input {
+    padding: 4px;
+    height: 25px;
+    font-size: 14px;
+}
+
+.mainContainer .editorSection .toolBar input:focus {
+    outline: 0px;
+    box-shadow: none;
+    -webkit-box-shadow: none;
+}
+
+.mainContainer .editorSection .toolBar button {
+    height: 25px;
+    outline: 0px;
+    padding: 0px 4px;
+    margin: 0px;
+    border-left: 0px;
+    box-shadow: none;
+    -webkit-box-shadow: none;
+    background-image: none!important;
+}
+
+.mainContainer .editorSection .toolBar button:focus {
+    outline: 0px;
+    background-color: #fff;
+}
+
+.mainContainer .editorSection .titleBar {
+    height: 35px;
+    border-left: 1px solid;
+}
+
+.mainContainer .editorSection .titleBar ul {
+    height: 100%;
+    list-style: none;
+    border-bottom: 0;
+}
+
+.mainContainer .editorSection .titleBar li a:focus {
+    background-color: transparent!important;
+}
+
+.mainContainer .editorSection .titleBar .hiddenTabs {
+    line-height: 35px;
+    padding: 0px 8px;
+    width: 31px;
+    display: inline-block;
+    border-radius: 0px;
+}
+
+.mainContainer .editorSection .titleBar .hiddenTabs a {
+    padding: 0px!important;
+    border-radius: 0px;
+    margin: 0px;
+}
+
+.mainContainer .editorSection .titleBar .hiddenTabs a:hover {
+    background-color: transparent!important;
+}
+
+.mainContainer .editorSection .titleBar .hiddenTabs a:hover, .mainContainer .editorSection .titleBar .hiddenTabs a:focus {
+    background-color: transparent;
+}
+
+.mainContainer .editorSection .titleBar .hiddenTabs ul {
+    border: 0px;
+    height: auto;
+    margin: 0px;
+    padding: 0px;
+}
+
+.mainContainer .editorSection .titleBar .hiddenTabs li {
+    border-radius: 0px;
+    height: auto;
+    padding: 0px 15px;
+    width: 175px;
+}
+
+.mainContainer .editorSection .titleBar .hiddenTabs li.divider {
+    height: 1px;
+    margin: 0px;
+    overflow: hidden;
+}
+
+.mainContainer .editorSection .titleBar > ul {
+    position: absolute;
+    top: 25px;
+    left: 31px;
+}
+
+.mainContainer .editorSection .titleBar li {
+    height: 100%;
+    border-radius: 15px 15px 0px 0px;
+    padding-right: 10px;
+}
+
+.mainContainer .editorSection .titleBar li.contentModified a {
+    font-weight: 700;
+}
+
+.mainContainer .editorSection .titleBar li a {
+    padding: 7px 10px;
+    border-radius: 15px 15px 0px 0px;
+    display: inline-block;
+}
+
+.mainContainer .editorSection .titleBar li span {
+    cursor: pointer;
+}
+
+.mainContainer .editorSection .editorWrap {
+    padding-top: 60px;
+    margin-top: -60px;
+    height: 100%!important;
+    width: 100%!important;
+}
+
+.mainContainer .editorSection #editor {
+    top: 60px;
+    position: absolute;
+    bottom: 0px;
+    width: 100%!important;
+    height: 100%;
+}
+
+.mainContainer .editorSection .editorWrap .CodeMirror {
+    height: 100%;
+    border-left: 1px solid;
+    display: none;
+}
+
+.mainContainer .editorSection .editorWrap .CodeMirror.open {
+    display: block;
+}
+
+.CodeMirror .cm-tab {
+    margin-left: 30.7875px;
+}
+
+.mainContainer .editorSection .titleBar li a:hover, .mainContainer .editorSection .titleBar li a:focus {
+    background-color: transparent;
+    border-color: transparent;
+}
+
+.verticalDragBar {
+    width: 2px;
+    float: right;
+    cursor: col-resize;
+    position: absolute;
+    top: 0px;
+    right: 0px;
+    z-index: 100;
+    height: 100%;
+}
+
+.horizontalDragBar {
+    height: 2px;
+    cursor: row-resize;
+    position: absolute;
+    bottom: 0px;
+    right: 0px;
+    z-index: 100;
+    width: 100%;
+}
+
+.ghostDragBar {
+    width: 2px;
+    height: 100%;
+    background-color: #a0a0a0;
+    opacity: 0.5;
+    position: absolute;
+    z-index: 999;
+    top: 0px;
+    cursor: col-resize;
+}
+
+
+/* Preview Section*/
+
+.mainContainer .previewSection {
+    overflow-y: auto;
+    padding: 0px;
+    overflow: hidden;
+}
+
+.previewWrap {
+    height: 100%;
+}
+
+
+/* Iframe */
+
+.previewWrap .iframeCover {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    width: 100%;
+    display: none;
+    background-color: #e2e2e2;
+    opacity: 0.5;
+    height: 100%;
+    border: 0px;
+    z-index: 20;
+}
+
+iframe#preview {
+    width: 100%;
+    height: 100%;
+    border: 0px;
+    padding-left: 10px;
+}
+
+
+/* Modal*/
+
+.modal-body {
+    width: 100%!important;
+}
+
+.modal-body table {
+    width: 100%;
+    text-align: center;
+}
+
+.modal-body table th {
+    text-align: center;
+}
+
+#HistorySelectDialog .container {
+    height: 300px!important;
+    overflow-y: auto;
+}
+
+
+/* Markup Cheatsheet*/
+
+.markupCheatsheet {
+    position: absolute;
+    display: none;
+    width: 100%;
+    height: 100%;
+    left: 15px;
+    overflow: hidden;
+    padding: 50px 20px;
+}
+
+.markupCheatsheet.open {
+    display: block;
+}
+
+.markup_closeBtn {
+    top: -5px!important;
+    right: 2px;
+    float: right;
+    cursor: pointer;
+}
+
+.markupCheatsheet .markup_navPills {
+    overflow: auto;
+}
+
+.markupCheatsheet .markup_tabContent {
+    height: 100%;
+    overflow: auto;
+}
+
+.markupCheatsheet .markup_tabContent #markup_tab_organization .markup_box_example {
+    width: 276px;
+    height: 36px;
+    border-radius: 8px;
+    text-align: center;
+    line-height: 36px;
+    margin: 5px;
+}
+
+.markupCheatsheet #markup_tab_display .bg-warning {
+    padding: 5px;
+    margin: 15px;
+    width: auto;
+}
+
+.markupCheatsheet .markup_tabContent #markup_tab_organization .markup_organization_rounded {
+    background-color: #f0f0f0;
+}
+
+.markupCheatsheet .markup_tabContent #markup_tab_organization .markup_organization_bordered {
+    border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.markupCheatsheet .markup_tabContent #markup_tab_organization .markup_organization_raised {
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.markupCheatsheet .markup_tabContent #markup_tab_organization .markup_organization_inverted {
+    background-color: #1c1c1c;
+    color: #aaa;
+}
+
+
+/* ContextMenu*/
+
+.sideBarRightClick {
+    display: none;
+    position: absolute;
+    z-index: 1000;
+}
+
+.sideBarRightClick.open {
+    display: block;
+}
+
+.cm-spell-error {
+    border-bottom: 2px dotted red;
+}
+
+
+/* Responsive */
+
+@media (min-width:992px) {
+    .mainContainer .editorSection {
+        height: 100%;
+    }
+    .mainContainer .previewSection {
+        margin-left: -1px;
+        height: 100%;
+        border-left: 1px solid;
+    }
+}
+
+@media (max-width:991px) {
+    .ghostDragBar[drag-left-ignore='sideSection'] {
+        width: 100%;
+        height: 2px;
+    }
+    .mainContainer .editorSection {
+        height: 50%;
+        margin-bottom: -1px;
+        border-bottom: 1px solid;
+    }
+    .mainContainer .previewSection {
+        height: 50%;
+    }
+}

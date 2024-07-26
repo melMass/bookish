@@ -40,7 +40,7 @@ $(document).ready(function() {
         }
 
         $.ajax("/_preview/", {
-            type: "POST",
+            type: "PUT",
             data: {
                 path: getPath(),
                 source: editor.getValue(),
@@ -71,7 +71,7 @@ $(document).ready(function() {
     window.saveEdits = function(instance)  {
         $("#preview").addClass("saving");
         $.ajax("/_save/", {
-            type: "POST",
+            type: "PUT",
             data: {
                 path: getPath(),
                 source: editor.getValue()
@@ -112,19 +112,19 @@ $(document).ready(function() {
     });
 
     function doResize() {
+        var main = $("main")
         var winHeight = $(window).height();
-        var main = $("#main");
-        var mainWidth = main.width();
+        var winWidth = $(window).width();
 
         // Find the top position of the editor and preview divs
-        var top = $("header").height();
+        var top = $("nav").height();
         var preview = $("#preview");
         var editPane = $("#editpane");
         var prevPane = $("#previewpane");
         var half;
 
         main.height(winHeight - top);
-        if (mainWidth <= 900) {
+        if (winWidth <= 900) {
             // Single-column "top-bottom" mode
             half = Math.floor((winHeight - top) / 2);
             editPane.css("width", "100%").offset({top: top, left: 0});
@@ -135,7 +135,7 @@ $(document).ready(function() {
             preview.height(half);
         } else {
             // Two-column "side-by-side" mode
-            half = Math.floor(mainWidth / 2);
+            half = Math.floor(winWidth / 2);
             editPane.width(half).offset({top: top, left: 0});
             editPane.height(winHeight - top);
             prevPane.width(half).offset({top: top, left: half});

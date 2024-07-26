@@ -26,8 +26,7 @@
 # policies, either expressed or implied, of Matt Chaput.
 
 from bookish.compat import string_type
-from bookish.parser.bootstrap import bootstrap_context
-from bookish.parser import Miss
+from bookish.parser.rules import Miss
 
 
 class AvenueParserError(Exception):

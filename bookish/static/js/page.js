@@ -1,163 +1,116 @@
 window.sidebarClosed = true;
 window.sidebarWidth = 320;
 
+// A 1x1 transparent pixel PNG image, encoded as a data: URI
+var pixel_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGP6zwAAAgcBApocMXEAAAAASUVORK5CYII="
+
+
+function isEmbeddedBrowser() {
+    if (window.Python) {
+        return true;
+    }
+
+    // In Qt5, the window.Python object may not be initialized yet
+    // so we also check for the existence of the qt.webChannelTransport
+    if (window.qt && window.qt.webChannelTransport) {
+        return true;
+    }
+
+    return false;
+}
 
 function getSelectionStart(o) {
-	if (o.createTextRange) {
-		var r = document.selection.createRange().duplicate();
-		r.moveEnd('character', o.value.length);
-		if (r.text == '') return o.value.length;
-		return o.value.lastIndexOf(r.text);
-	} else return o.selectionStart;
+    if (o.createTextRange) {
+        var r = document.selection.createRange().duplicate();
+        r.moveEnd('character', o.value.length);
+        if (r.text == '') return o.value.length;
+        return o.value.lastIndexOf(r.text);
+    } else return o.selectionStart;
 }
 
 function getSelectionEnd(o) {
-	if (o.createTextRange) {
-		var r = document.selection.createRange().duplicate();
-		r.moveStart('character', -o.value.length);
-		return r.text.length;
-	} else return o.selectionEnd;
+    if (o.createTextRange) {
+        var r = document.selection.createRange().duplicate();
+        r.moveStart('character', -o.value.length);
+        return r.text.length;
+    } else return o.selectionEnd;
 }
 
 function getVimeoThumbnail(vid, size, callback) {
-    var url = "http://vimeo.com/api/v2/video/" + vid + ".json";
-    $.getJSON('http://www.vimeo.com/api/v2/video/' + vid + '.json?callback=?',
-        {format: "json"},
+    $.getJSON('http://www.vimeo.com/api/v2/video/' + vid + '.json?callback=?', {
+            format: "json"
+        },
         function(data) {
             callback(data[0]["thumbnail_" + size]);
         }
     );
 }
 
+function setUpImageComparisons() {
+    $(".image-comparison").each(function() {
+        var elem = $(this);
+        var pressed = false;
+        var img1 = elem.find(".img1");
+        var img2 = elem.find(".img2");
+        var slider = $("<div class='compare-slider'></div>");
+        $(img1).before(slider);
 
-function setContentSize(el) {
-    el = $(el);
-    var em = parseFloat($("body").css("font-size"));
+        // TODO: need to reposition everything on resize
+        slider.mousedown(startSlide);
+        slide(img1.width() / 2);
 
-    var width = el.width() / em;
-    var cls;
-    if (width <= 30) {
-        cls = "xsmall";
-    } else if (width <= 40) {
-        cls = "small";
-    } else if (width <= 60) {
-        cls = "medium";
-    } else if (width <= 80) {
-        cls = "large";
-    } else {
-        cls = "xlarge";
-    }
-    el.removeClass("xsmall small medium large xlarge");
-    el.addClass(cls);
-}
+        function startSlide(e) {
+            e.preventDefault();
+            pressed = true;
+            $(window).mousemove(moveSlide);
+            $(window).mouseup(endSlide);
+        }
 
-function setContentSizeClasses(spec) {
-    spec = spec || "#main";
-    var e = $(spec);
-    var subs = e.find("div.sizing,div.column");
-    subs.each(function() {
-        setContentSize(this);
+        function endSlide(e) {
+            pressed = false;
+            return false;
+        }
+
+        function moveSlide(e) {
+            if (!pressed) {
+                return false
+            }
+            if (!(e.buttons & 1)) {
+                return endSlide(e)
+            }
+            var pos = getCursorPos(e);
+            var w = img2.width();
+            if (pos < 0) pos = 0;
+            if (pos > w) pos = w;
+            slide(pos);
+        }
+
+        function getCursorPos(e) {
+            e = e || window.event;
+            var a = img1[0].getBoundingClientRect();
+            var x = e.pageX - a.left;
+            return x - window.pageXOffset;
+        }
+
+        function slide(x) {
+            img2.css("clip", "rect(0px, " + x + "px, auto, auto)");
+
+            var left = (x - slider.width() / 2) + "px";
+            slider.css("left", left);
+        }
     });
 }
 
-function openSidebar() {
-    window.sidebarClosed = false;
-    setSidebarWidth(window.sidebarWidth);
-    $("#menubtn").removeClass("closed").addClass("open");
-    recordSidebarState();
-    $(window).trigger("sidebaropen");
-    if (window.shouldScroll) {
-        window.shouldScroll = false;
-        setTimeout(scrollToSidebarHere, 100);
-    }
-}
-
-function closeSidebar() {
-    window.sidebarClosed = true;
-    $("#sidebar").attr("class", "closed"); //.width(6);
-    $("#menubtn").removeClass("open").addClass("closed");
-    $("#main").css("left", 0).css("width", "100%");
-    recordSidebarState();
-    $(window).trigger("sidebarclose");
-    setContentSizeClasses();
-}
-
-function toggleSidebar() {
-    if (window.sidebarClosed) {
-        openSidebar();
-    } else {
-        closeSidebar();
-    }
-}
-
-function resetSidebar() {
-    var w = window.sidebarWidth;
-    var win = $(window);
-    var ww = win.width();
-
-    var sidebar = $("#sidebar");
-    var main = $("#main");
-    var splitbar = $("#split-bar");
-
-    var h = (win.height() - 32) + "px";
-    sidebar.css("height", h);
-    main.css("height", h).css("max-height", h);
-    splitbar.css("height", h);
-
-    if (!window.sidebarClosed) {
-        if ((ww - w) < 320) {
-            sidebar.attr("class", "open overlay").width(w);
-            main.css("left", 0).css("width", "100%")
-        } else {
-            sidebar.attr("class", "open").width(w);
-            main.css("left", w).css("width", (ww - w) + "px");
-        }
-    }
-}
-
-function setSidebarWidth(w) {
-    window.sidebarWidth = w;
-    resetSidebar();
-    setContentSizeClasses();
-}
-
-function scrollToSidebarHere() {
-    var sbc = $("#sidebar-content");
-    var here = sbc.find(".here");
-    if (here.size() > 0) {
-        var wh = $(window).height();
-        var y = here.offset().top;
-        sbc.scrollTop(y - (wh / 4));
-    }
-}
-
-function dragSidebar(e) {
-    e.preventDefault();
-    if (window.sidebarClosed) {
-        openSidebar();
-    } else {
-        var sidebar = $('#sidebar');
-        $(document).mousemove(function (e) {
-            e.preventDefault();
-            var x = e.pageX - sidebar.offset().left;
-            if (x > min && x < max && e.pageX < ($(window).width() - mainmin)) {
-                window.sidebarClosed = false;
-                setSidebarWidth(x);
-            }
-        })
-    }
-}
 
 function updateHash() {
-    var e = $(location.hash);
-	
-    var y = e.position().top;
-    $("#main").scrollTop(y);
-	
-    // If the element is collapsible and collapsed, open it
-    if (e.hasClass("collapsed")) {
+    // If the hash element exists and is collapsible, de-collapse it
+    var id = window.location.hash;
+    var e = $(id);
+    if (e.length > 0 && e.hasClass("collapsible")) {
         e.removeClass("collapsed");
     }
+
+    setTimeout(window.scrollBy(0, -32), 20);
 }
 
 function zoomImage(e) {
@@ -169,138 +122,22 @@ function zoomImage(e) {
         lbox = $("<div id='lightbox'><img src='" + src + "'/></div>");
         $("body").append(lbox);
         lbox.click(function(e) {
-           lbox.hide();
+            lbox.hide();
         });
     } else {
         lbox.find("img").attr("src", src);
     }
 
     lbox.show();
-    lbox.offset({left: 0, top: el.offset().top});
-}
-
-function setUpFilters() {
-    $(".filtered").each(function() {
-        var e = $(this);
-        var controls = e.children(".filter-controls");
-        var title = controls.find(".filter-title");
-        var menus = controls.find(".filter-menu");
-        var body = e.children(".filtered-body");
-
-        // Add "collapse all" and "expand all" buttons if there are collapsibles
-        // in the filtered body
-        var collapses = body.find(".collapsible");
-        if (collapses.size() >= 2) {
-            var collapseall = $('<button>Collapse All</button>');
-            var expandall = $('<button>Expand All</button>');
-            collapseall.click(function() {
-                collapses.addClass("collapsed");
-            });
-            expandall.click(function() {
-                collapses.removeClass("collapsed");
-            });
-            controls.append(collapseall);
-            controls.append(expandall);
-        }
-
-        menus.each(function() {
-            var select = $(this);
-            var counts = {};
-            var name = select.attr("data-name");
-            var value;
-
-            body.find(".item[data-" + name + "]").each(function() {
-                var valstring = $(this).attr("data-" + name);
-                if (valstring && valstring !== "") {
-                    var vallist;
-                    if (name == "this") {
-                        vallist = valstring.split(" ");
-                    } else {
-                        vallist = [valstring]
-                    }
-                    for (var i = 0; i < vallist.length; i++) {
-                        value = vallist[i];
-                        if (counts.hasOwnProperty(value)) {
-                            counts[value] += 1;
-                        } else {
-                            counts[value] = 1;
-                        }
-                    }
-                }
-            });
-
-            var allvalues = Object.keys(counts);
-            if (allvalues.length > 0) {
-                allvalues.sort();
-                for (var i = 0; i < allvalues.length; i++) {
-                    value = allvalues[i];
-                    select.append($('<option>', {
-                        value: value,
-                        text : value + " (" + counts[value] + ")"
-                    }));
-                }
-
-                select.change(function() {
-                    runFilter(title, menus, body, true)
-                });
-            } else {
-                var selectid = select.attr("id");
-                $("#" + selectid + "_control").hide();
-            }
-        });
-
-        title.keyup(function() {runFilter(title, menus, body)});
+    lbox.offset({
+        left: 0,
+        top: el.offset().top
     });
 }
 
-function runFilter(title, menus, body, clear) {
-    // Build a CSS selector...
-    var selector = "";
-    // For each menu in the filter ui
-    menus.each(function() {
-        // Grab the select element
-        var select = $(this);
-        // Get the search field name associated with it
-        var name = select.attr("data-name");
-        // Get the currently selected menu item's value
-        var value = select.val();
-        // The first/blank entry in the menu has the value "*" meaning no filter
-        if (value != "*") {
-            if (clear) title.val("");
-            if (name == "tags") {
-                selector += "[data-tags~=\"" + value + "\"]";
-            } else {
-                selector += "[data-" + name + "=\"" + value + "\"]";
-            }
-        }
-    });
-
-    // Add the text search filter value to the selector
-    var text = title.val().toLowerCase();
-    if (text !== "") {
-        selector += "[data-title*=\"" + text + "\"]";
-    }
-
-    body.find("section.heading").show();
-    body.find(".item").show();
-    if (selector !== "") {
-        body.find(".item:not(" + selector + ")").hide();
-
-        // Hide headings if all items inside are hidden
-        body.find("section.heading").each(function() {
-            var h = $(this);
-            var items = h.find(".item");
-            if (!items.is(':visible')) {
-                h.hide();
-            } else {
-                h.show();
-            }
-        })
-    }
-}
 
 function setUpCharts(spec) {
-    spec = spec || "#main";
+    spec = spec || "#content";
     $(spec + " .chart").each(function() {
         var e = $(this);
         try {
@@ -342,6 +179,43 @@ function setUpTabs() {
     })
 }
 
+
+function setUpVimeoBackwardsCompatibility() {
+    // Remove this when the embedded browser can show video
+
+    if (isEmbeddedBrowser()) {
+        // We are running in the embedded help browser which currently does
+        // not have video support. Replace vimeo iframes with a clickable links.
+        $(".vimeo.video").each(function() {
+            // Grab the iframe
+            var frame = $(this);
+            // Get the attrs from the frame
+            // var src = frame.attr("src");
+            var vidid = frame.attr("data-vimeo-id");
+            var desc = frame.attr("title");
+            var src = "https://vimeo.com/" + vidid;
+            // Make a link element for the video
+            var link = $("<a href='" + src + "'>" + desc + " video</a>");
+            // Attach a click handler to open the URL in a real browser
+            link.click(function() {
+                return openURLInExternalBrowser(src);
+            });
+            // Make a div element that will have the video thumbnail as a
+            // background image
+            var linkdiv = $("<div class='replaced-vimeo'>");
+            // Put the link inside the div
+            linkdiv.append(link);
+            // Replace the iframe with the div
+            $(this).replaceWith(linkdiv);
+            // Run the async request to get the video thumbnail
+            getVimeoThumbnail(vidid, "small", function(imgurl) {
+                linkdiv.css("background-image", "url('" + imgurl + "')");
+            });
+        })
+    }
+}
+
+
 function setUpThumbnails() {
     $(".vimeo-reference").each(function() {
         var e = $(this);
@@ -354,57 +228,78 @@ function setUpThumbnails() {
     })
 }
 
-function recordSidebarState() {
-    Cookies.set("sidebarstate", {
-        width: window.sidebarWidth,
-        closed: window.sidebarClosed,
-        query: $("#q").val()
-    }, {path: "/"});
+
+function setUpSearch() {
+    $(".search").searchbox();
+    $(".search-button").click(function() {
+        $(this).parent().find(".search").focus()
+    });
+
+    $(".livesearch .search").first().focus();
 }
 
-var min = 140;
-var max = 3600;
-var mainmin = 200;
+
+function setUpIconErrors() {
+    $("img.icon").on("error", function() {
+        $(this).attr("data-old-src", $(this).attr("src"));
+        $(this).unbind("error").attr("src", pixel_uri);
+    });
+}
+
+
+function scrollToc() {
+    // Scroll the TOC to show the entry for the current page if it's not visible
+    var toc = $("#toc");
+    var here = toc.find(".here");
+    if (here.length > 0) {
+        // Get the offset of the "here" div
+        var y = here.offset().top;
+        var height = toc.height();
+        if (y > (height - 32)) {
+            // If the "here" div is "offscreen" (more or less), scroll to it
+
+            // Don't just scroll right to it so it's the first item; it's nicer
+            // to place it 1/3 of the way from the top
+            y -= height * 0.33;
+            if (y < 0) {
+                y = 0;
+            }
+
+            toc.scrollTop(y);
+        }
+    }
+}
+
+function initHoudiniWebChannel() {
+    if (!window.qt || !window.qt.webChannelTransport) {
+        // The web channel transport is not available so we must not
+        // be running in the QWebEngine embedded browser
+        return;
+    }
+
+    new QWebChannel(qt.webChannelTransport, function(channel) {
+        window.Python = channel.objects.Python;
+    });
+}
 
 function setUpPage() {
     var istop = window.self === window.top;
 
+    initHoudiniWebChannel();
+
     if (istop) {
-        $('#split-bar').mousedown(dragSidebar);
-        $(document).mouseup(function(e) {
-            $(document).unbind('mousemove');
-        });
-        var sbstate = Cookies.getJSON("sidebarstate");
-
-        var sbox = $("#q");
-        sbox.searchbox();
-        if (sbstate) {
-            window.sidebarWidth = sbstate["width"];
-            if (sbstate["closed"]) {
-                closeSidebar();
-            } else {
-                openSidebar();
-            }
-            sbox.val(sbstate["query"] || "");
-        } else {
-            recordSidebarState();
-        }
-
-        $("#menubtn").click(function(e) {
-            toggleSidebar();
-        });
+        setUpSearch();
 
         $(window).on("hashchange", updateHash);
         if (location.hash) {
             setTimeout(updateHash, 50);
         }
-
-        if (window.sidebarClosed) {
-            window.shouldScroll = true;
-        } else {
-            scrollToSidebarHere();
-        }
     }
+
+    // Set up the "on this page" select menu
+    $("#onthispage").change(function() {
+        location.hash = $(this).val()
+    });
 
     $("img.animated").each(function() {
         var img = $(this);
@@ -437,17 +332,18 @@ function setUpPage() {
             }
         })
     });
-    $(".collapsible").each(function() {
-        var w = $(this);
-        // var c = w.children(".content");
-        w.children(".label").click(function() {
-            if (w.hasClass("collapsed")) {
-                w.removeClass("collapsed");
-            } else {
-                w.addClass("collapsed");
-            }
-        })
+
+    // Add a general click handler for labels inside collapsible elements
+    $(document).on("click", ".collapsible > .label", function() {
+        var label = $(this);
+        var parent = label.parent();
+        if (parent.hasClass("collapsed")) {
+            parent.removeClass("collapsed");
+        } else {
+            parent.addClass("collapsed");
+        }
     });
+
     $(".load-example").each(function() {
         var btn = $(this);
         btn.click(function(e) {
@@ -457,21 +353,25 @@ function setUpPage() {
         })
     });
 
-    $(window).resize(function(e) {
-        if (istop) {
-            resetSidebar();
-        }
-        setContentSizeClasses();
-    });
-
-    resetSidebar();
-    setContentSizeClasses();
+    scrollToc();
     setUpCharts();
-    setUpFilters();
     setUpTabs();
     setUpThumbnails();
+    setUpIconErrors();
+    // Remove this when the embedded browser can show video
+    setUpVimeoBackwardsCompatibility();
     $("figure.unzoomed").click(zoomImage).attr("title", "Click to zoom")
 }
 
+function openURLInExternalBrowser(url) {
+    if (!window.Python) {
+        return true;
+    }
+
+    var py_statements = "__import__('webbrowser').open_new_tab('" + url + "')";
+    window.Python.runStatements(py_statements);
+    return false;
+}
+
 $(document).ready(setUpPage);
-$(window).unload(recordSidebarState);
+$(window).on("load", setUpImageComparisons)

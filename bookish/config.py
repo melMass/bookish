@@ -1,12 +1,33 @@
 import os.path
+import sys
 
-from bookish import search, stores, textify, wikipages
-from bookish.stores import MountStore as Ms
-from bookish.stores import FileStore as Fs
+from bookish import search
+from bookish.text import textify
+
+
+this_dir = os.path.abspath(os.path.dirname(__file__))
 
 
 def expandpath(path):
-    return os.path.abspath(os.path.expanduser(os.path.expandvars(path)))
+    path = path.replace("${PYTHON_VERSION}", "%s.%s" %
+                        (sys.version_info.major, sys.version_info.minor))
+    return os.path.expanduser(os.path.expandvars(path))
+
+
+def read_config(cfg=None, config_file=None, root_path=".", config_obj=None):
+    from bookish.wiki import config
+    from bookish.stores import expandpath
+
+    cfg = cfg or config.Config(root_path)
+    cfg.from_object(config_obj or DefaultConfig)
+
+    if config_file:
+        config_file = expandpath(config_file, root_path=root_path)
+        cfg.from_pyfile(config_file)
+
+    cfg.from_envvar("BOOKISH_CONFIG", silent=True)
+
+    return cfg
 
 
 class DefaultConfig(object):
@@ -15,38 +36,58 @@ class DefaultConfig(object):
     SECRET_KEY = 'dummy'
     DEBUG = False
 
-    # Directories
-
-    base_dir = os.path.abspath(os.path.dirname(__file__))
-
     # Bookish configuration
 
     # Some variables that can be used in templates
-    VARS = {}
     ICON_32 = "/images/logos/logo_32.png"
     ICON_144 = "/images/logos/logo_144.png"
     PYGMENTS_CSS = "/static/css/pygments/brightcolor.css"
 
-    # A Storage object containing the documents available to the wiki view
-    DOCUMENTS = [
-        Ms(Fs(base_dir + "/templates"), "/templates"),
-        Ms(Fs(base_dir + "/grammars"), "/grammars"),
-        Ms(Fs(base_dir + "/static"), "/static"),
+    # Basic filesystem of support directories.
+    # This is a Storage specification (to be interpreted by
+    # stores.store_from_spec()).
+    SUPPORT_DOCUMENTS = [
+        {
+            "type": "mount",
+            "source": os.path.join(this_dir, "templates"),
+            "target": "/templates",
+        }, {
+            "type": "mount",
+            "source": os.path.join(this_dir, "grammars"),
+            "target": "/grammars",
+        }, {
+            "type": "mount",
+            "source": os.path.join(this_dir, "static"),
+            "target": "/static",
+            "static": True,
+        }
     ]
+
+    # Storage spec for actual user documents (to be interpreted by
+    # stores.store_from_spec())
+    DOCUMENTS = []
+
+    # Extra documents to be added in user configuration (this is easier than
+    # extending DOCUMENTS)
+    EXTRA_DOCUMENTS = []
 
     # Directory of SCSS files to compile into CSS
     SCSS_ASSET_DIR = "/static/scss/"
 
     # True if documents should be editable in the browser
     EDITABLE = False
+    # Storage spec for where edited files should be stored
+    EDIT_STORE = None
 
+    # The template to use when rendering Wiki markup to HTML
+    WIKI_STYLE = "/templates/wiki.jinja2"
     # Virtual path to the template to use for wiki pages
-    DEFAULT_TEMPLATE = "/templates/page.jinja2"
+    TEMPLATE = "/templates/page.jinja2"
     # Virtual path to the template to use for search results
-    SEARCH_TEMPLATE = "/templates/search.jinja2"
+    SEARCH_TEMPLATE = "/templates/results.jinja2"
 
     # A bookish.wikipages.WikiPages subclass to use to generate wiki pages
-    PAGES_CLASS = wikipages.WikiPages
+    PAGES_CLASS = "bookish.wiki.wikipages.WikiPages"
     # A system file path to a directory in which to store cache files
     CACHE_DIR = "./cache"
 
@@ -54,7 +95,7 @@ class DefaultConfig(object):
     INDEX_DIR = "./index"
     # A bookish.search.Searchables instance to use to translate wiki pages into
     # searchable information
-    SEARCHABLES = search.Searchables()
+    SEARCHABLES = "bookish.search.Searchables"
     # True if the server should run an indexing thread in the background
     ENABLE_BACKGROUND_INDEXING = False
     # Number of seconds between background indexing runs
@@ -67,19 +108,17 @@ class DefaultConfig(object):
     # Max number of checkpoints to save
     CHECKPOINT_MAX = 10
 
-    # A bookish.coloring.SyntaxColorer instance to use for coloring code blocks
-    COLORERS = ""
-
     # A bookish.textify.Textifier subclass to use for translating wiki pages
     # into plain text
     TEXTIFY_CLASS = textify.TextifierBase
 
     # The base name for directory index pages
-    INDEX_PAGE_NAME = "_index"
+    INDEX_PAGE_NAME = "index"
     # The file extension for wiki pages
     WIKI_EXT = ".txt"
+
     # The default language for wiki pages
-    DEFAULT_LANGUAGE = "en-us"
+    DEFAULT_LANGUAGE = "en"
     # The default locale for wiki pages
     DEFAULT_LOCALE = "en_US"
 
@@ -91,5 +130,4 @@ class DefaultConfig(object):
     SEARCH_SHORTCUTS = []
 
 
-class TestConfig(DefaultConfig):
-    DEBUG = True
+

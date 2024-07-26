@@ -30,10 +30,9 @@ import inspect
 import random
 import re
 from collections import deque
-from itertools import chain
 
 from bookish import paths
-from bookish.compat import string_type, xrange
+from bookish.compat import string_type, text_type, xrange
 
 
 class Missing(object):
@@ -58,13 +57,14 @@ def string(obj, before=None, after=None):
     elif isinstance(obj, string_type):
         s = obj
     elif isinstance(obj, (list, tuple)) or inspect.isgenerator(obj):
-        s = "".join(string(o) for o in obj)
+        s = "".join(string(o, before=before, after=after) for o in obj)
     elif isinstance(obj, dict) and ("text" in obj or "body" in obj):
-        s = " ".join((string(obj.get("text")), string(obj.get("body"))))
+        s = "".join((string(obj.get("text"), before=before, after=after),
+                     string(obj.get("body"), before=before, after=after)))
     else:
         s = str(obj)
 
-    return s
+    return (before or "") + s + (after or "")
 
 
 def first(obj):
@@ -111,10 +111,12 @@ def find_items(block, itemtype="item"):
 
     if body:
         for subblock in body:
+            assert isinstance(subblock, dict), ("Found %r in body %r" %
+                                                (subblock, body))
             stype = subblock.get("type")
             srole = subblock.get("role")
-            matched = ((itemtype and stype == itemtype)
-                       or (not itemtype and srole == "item"))
+            matched = ((itemtype and stype == itemtype) or
+                       (not itemtype and srole == "item"))
             if matched:
                 yield subblock
             else:
@@ -151,11 +153,31 @@ def find_spans_of_type(text, typename):
                     yield subspan
 
 
-def first_subblock_string(block):
+def find_title(block):
+    if isinstance(block, (list, tuple)):
+        for subblock in block:
+            title = find_title(subblock)
+            if title:
+                return title
+        return
+
+    if "title" in block:
+        return block["title"]
+    elif block.get("type") in ("title", "h"):
+        return block.get("text", "")
+
+
+def first_subblock_text(block):
     for subblock in block.get("body", ()):
         text = subblock.get("text")
         if text:
-            return string(text)
+            return text
+
+
+def first_subblock_string(block):
+    text = first_subblock_text(block)
+    if text:
+        return string(text)
 
 
 def subblocks_summary(block):
@@ -186,6 +208,33 @@ def subblocks_of_type(body, typename):
 def first_subblock_of_type(body, typename):
     for subblock in subblocks_of_type(body, typename):
         return subblock
+
+
+def _filter_predicate(spec):
+    if isinstance(spec, str):
+        spec = frozenset(spec.split())
+
+    def predicate_fn(block):
+        typename = block.get("type")
+        blockid = block_id(block)
+        return (typename in spec or
+                (blockid and ("#%s" % blockid) in spec))
+
+    return predicate_fn
+
+
+def retain_subblocks(body, include):
+    if isinstance(body, dict):
+        body = body.get("body", ())
+    pred = _filter_predicate(include)
+    return [b for b in body if pred(b)]
+
+
+def remove_subblocks(body, exclude):
+    if isinstance(body, dict):
+        body = body.get("body", ())
+    pred = _filter_predicate(exclude)
+    return [b for b in body if not pred(b)]
 
 
 def first_span_of_type(text, typename):
@@ -227,6 +276,17 @@ def text_replace(text, target, replacement):
     else:
         raise ValueError
 
+def string_before(text, marker):
+    text = string(text)
+    pos = text.find(marker)
+    return text[:pos] if pos >= 0 else text
+
+
+def string_after(text, marker):
+    text = string(text)
+    pos = text.find(marker)
+    return text[pos + len(marker):] if pos >=0 else text
+
 
 def next_table_cell(block):
     body = block.get("body", [])
@@ -266,13 +326,62 @@ def find_all_breadth(obj, with_text=False):
             yield obj
 
 
-def find_headings(block, depth=1, types=("h", "section")):
+def find_by_attr(top, name, value):
+    for b in find_all_depth(top):
+        if name == "id" and string(b.get("id")) == value:
+            yield b
+        elif "attrs" in b and string(b["attrs"].get(name)) == value:
+            yield b
+
+
+def find_with_attr(top, name):
+    for b in find_all_depth(top):
+        if "attrs" in b and name in b["attrs"]:
+            yield b
+
+
+def first_by_attr(top, name, value):
+    for b in find_by_attr(top, name, value):
+        return b
+
+
+def find_by_type(top, typename):
+    for b in find_all_depth(top):
+        if b.get("type") == typename:
+            yield b
+
+
+def first_of_type(top, typename):
+    for b in find_by_type(top, typename):
+        return b
+
+
+def attr(block, name, default=None):
+    if block and "attrs" in block:
+        return block["attrs"].get(name, default)
+    return default
+
+
+def topattr(block, name, default=None):
+    if block:
+        if name in block:
+            return block[name]
+        elif "attrs" in block:
+            return block["attrs"].get(name, default)
+    return default
+
+
+def find_id(top, value):
+    return first_by_attr(top, "id", value)
+
+
+def find_headings(block, depth=1, types=("h", "section", "heading")):
     if isinstance(block, dict):
-        body = block["body"]
+        body = block.get("body", ())
     elif isinstance(block, list):
         body = block
     else:
-        raise ValueError
+        raise ValueError("Can't find headings in %r" % block)
 
     ls = []
     for subblock in body:
@@ -282,7 +391,7 @@ def find_headings(block, depth=1, types=("h", "section")):
             if "body" in hblock:
                 del hblock["body"]
 
-            if depth > 1:
+            if depth > 1 and "body" in subblock:
                 hbody = find_headings(subblock, depth-1, types)
                 if hbody:
                     hblock["body"] = hbody
@@ -346,6 +455,16 @@ def build_toc(docroot, basepath=None, block=None, i=0, depth=0, maxdepth=99):
     return block
 
 
+def icon_ref(val):
+    if not paths.extension(val):
+        val += ".svg"
+
+    if any(val.startswith(pre) for pre in ("/", "./", "../", "opdef:")):
+        return val
+    else:
+        return "/icons/%s" % val
+
+
 def has_option(s, key):
     if s:
         return key in string(s).split()
@@ -364,19 +483,37 @@ def random_id():
     return "id%05d" % random.randint(0, 99999)
 
 
-def block_id(block):
-    # Need to account for the fact that the block or attrs might have an "id"
-    # key but set to None
+def slugify(text, lower=True):
+    from unicodedata import normalize
 
+    if not isinstance(text, text_type):
+        text = text.decode("utf8")
+    if lower:
+        text = text.lower()
+    text = normalize("NFKD", text)
+    return "-".join(m.group(0) for m
+                    in re.finditer(r"\w+", text, re.UNICODE))
+
+
+def block_id(block, strip_nums=False):
     blockid = block.get("id")
+    if not blockid:
+        attrs = block.get("attrs")
+        if attrs:
+            blockid = attrs.get("id")
+
+    if blockid:
+        right = len(blockid) - 1
+        while strip_nums and right >= 0 and blockid[right].isnumeric():
+            right -= 1
+        blockid = blockid[:right + 1]
+
     if blockid:
         return blockid
 
-    attrs = block.get("attrs")
-    if attrs:
-        attrid = attrs.get("id")
-        if attrid:
-            return attrid
+    text = string(block.get("text"))
+    if text:
+        return slugify(text)
 
     return "id" + hex(id(block))[2:]
 
@@ -401,13 +538,36 @@ def thing(x):
     return repr(x) + "," + type(x).__name__
 
 
+def attr_bag(block, attrname):
+    if "attrs" in block:
+        value = block["attrs"].get(attrname)
+        if value:
+            return set(value.strip().split(" "))
+    return ()
+
+
+def engroup(blocks):
+    blocks = list(blocks)
+    if not blocks:
+        return None
+
+    type = blocks[0].get("type")
+    return {
+        "type": type + "_group",
+        "body": blocks,
+        "container": True,
+    }
+
+
 all_functions = (
-    string, first, last, sort, split_tags, find_items,
-    first_subblock_string, subblocks_summary, first_subblock_of_type,
-    find_links, first_span_of_type, find_spans_of_type,
-    subblock_by_id, text_replace, next_table_cell,
-    find_all_depth, find_all_breadth, find_headings,
-    build_toc, has_option, random_name, random_id, block_id,
-    collapse, thing,
+    string, first, last, sort, split_tags, find_items, attr, topattr,
+    first_subblock_text, first_subblock_string, subblocks_summary,
+    first_subblock_of_type, retain_subblocks, remove_subblocks,
+    find_title, find_links, first_span_of_type, find_spans_of_type,
+    subblock_by_id, text_replace, string_before, string_after,  next_table_cell,
+    find_all_depth, find_all_breadth, find_by_attr, find_with_attr,
+    first_by_attr, find_by_type, first_of_type, find_headings,
+    build_toc, has_option, random_name, random_id, slugify, block_id,
+    collapse, thing, icon_ref, attr_bag,
 )
 functions_dict = dict((fn.__name__, fn) for fn in all_functions)

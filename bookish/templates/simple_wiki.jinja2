@@ -1,0 +1,96 @@
+{% macro default(this) %}
+    <span data-type="{{ this.type }}"></span>
+{% endmacro %}
+
+{% macro root_rule(this) %}
+    {{ render(this.body) }}
+{% endmacro %}
+
+{% macro title_rule(this) %}{% endmacro %}
+
+{% macro summary_rule(this) %}
+    <p class="summary">{{ render(this.text) }}</p>
+{% endmacro %}
+
+{% macro para_rule(this) %}
+    <p>{{ render(this.text) }}</p>
+{% endmacro %}
+
+{% macro usage_group_rule(this) %}
+    {{ render(this.body) }}
+{% endmacro %}
+
+{% macro usage_rule(this) %}
+    {% set pagetype = docroot.attrs.type if docroot.attrs else None %}
+    {% if pagetype == "vex" %}
+        {% set syntax = "vex" %}
+    {% elif pagetype == "homfunction" %}
+        {% set syntax = "python" %}
+    {% elif pagetype in ("expression", "command") %}
+        {% set syntax = "hscript" %}
+    {% endif %}
+
+    <p>
+        {% for span in this.text -%}
+            {%- if span.type == "code" -%}
+                <span class="code-container"><code class="codehilite">
+                    {{- format_code(span, lexername=syntax) -}}
+                </code></span>
+            {%- else -%}
+                {{ render(span) }}
+            {%- endif -%}
+        {%- endfor %}
+    </p>
+{% endmacro %}
+
+{% macro methods_item_rule(this) %}
+    {{ render(this.body) }}
+{% endmacro %}
+{% macro functions_item_rule(this) %}
+    {{ render(this.body) }}
+{% endmacro %}
+
+{% macro methods_item_rule(this) %}
+    <p>{{ render(this.text) }}</p>
+{% endmacro %}
+
+{% macro code_rule(this) -%}
+    <code>{{ string(this.text) | escape }}</code>
+{%- endmacro %}
+
+{% macro link_rule(this) -%}
+    {{ render(this.text or this.fallback_text) }}
+{%- endmacro %}
+
+{% macro values_item_group_rule(this) %}
+    <p>
+        {%- for vitem in this.body -%}
+            {%- if loop.index > 1 %}, {% endif -%}
+            <code>.{{ string(vitem.text).strip() | escape }}</code>
+        {%- endfor -%}
+    </p>
+{% endmacro %}
+
+{% macro var_rule(this) -%}
+    <var>{{ render(this.text) }}</var>
+{% endmacro %}
+
+{% macro strong_rule(this) -%}
+<strong>{{ render(this.text) }}</strong>
+{%- endmacro %}
+
+{% macro ui_rule(this) -%}
+<strong class="ui">{{ render(this.text) }}</strong>
+{%- endmacro %}
+
+{% macro em_rule(this) -%}
+<em>{{ render(this.text) }}</em>
+{%- endmacro %}
+
+{% macro q_rule(this) -%}
+&ldquo;{{ render(this.text) }}&rdquo;
+{%- endmacro %}
+
+{% macro pre_rule(this) %}
+    <p><pre>{{ string(this.text) }}</pre></p>
+{% endmacro %}

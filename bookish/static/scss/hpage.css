@@ -1,0 +1,479 @@
+@import url("../../static/fonts/noto_cjk_jp.css");
+@import url("../../static/fonts/Source_Sans_Pro/source_sans.css");
+@import url("../../static/fonts/Source_Code_Pro/source_code.css");
+@import url("../../static/fonts/font-awesome.min.css");
+*, *::before, *::after {
+  box-sizing: border-box;
+  text-indent: 0; }
+
+html {
+  font-size: 15px;
+  padding: 0; }
+
+body, form, input {
+  font-family: "Source Sans Pro", "Noto Sans CJK JP", Arial, sans-serif; }
+
+body {
+  line-height: 1.5em;
+  margin: 0;
+  padding: 0;
+  background-color: white; }
+
+/* Basics */
+p {
+  margin: 1em 0; }
+
+a:link, a:visited {
+  color: #1782ba;
+  text-decoration: none; }
+
+a:visited {
+  color: #2c7ba5; }
+
+a:hover {
+  color: #21a1e3;
+  text-decoration: underline; }
+
+/* Lists */
+ul, ol {
+  margin: 0 0 0 2em;
+  padding: 0; }
+  ul > li, ol > li {
+    margin: 1em 0; }
+
+ul > li {
+  list-style: disc; }
+
+ol {
+  counter-reset: ord-counter; }
+
+ol > li {
+  list-style: none;
+  clear: left; }
+
+ol > li:before {
+  float: left;
+  margin-left: -2em;
+  content: counter(ord-counter);
+  counter-increment: ord-counter;
+  font-weight: 800;
+  color: #666; }
+
+li {
+  margin: 1em 0; }
+
+li > :first-child {
+  margin-top: 0; }
+
+li > :last-child {
+  margin-bottom: 0; }
+
+/* Tables */
+table, td, th {
+  font-size: 1rem; }
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  margin: 1em 0; }
+
+td, th {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.7em 0.8em; }
+
+th {
+  cursor: auto;
+  text-align: left;
+  font-weight: 800;
+  text-transform: none;
+  border-left: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  background-color: transparent;
+  padding-bottom: 0; }
+
+tr.divider > td {
+  border-bottom: 2px solid rgba(0, 0, 0, 0.12); }
+
+td {
+  border-top: 1px solid rgba(0, 0, 0, 0.07); }
+
+table tr:first-child > td {
+  border-top: none; }
+
+td > :first-child, th > :first-child {
+  margin-top: 0; }
+
+td > :last-child, th > :last-child {
+  margin-bottom: 0; }
+
+td > ul:first-child > li:first-child {
+  margin-top: 0; }
+
+td > ul:last-child > li:last-child {
+  margin-bottom: 0; }
+
+table.table {
+  width: 100%; }
+
+table > thead > tr > th:first-child {
+  border-left: none; }
+
+/* Code */
+pre, code, tt, a.Hom, a.Vex {
+  font-family: "Source Code Pro", monospace; }
+
+pre {
+  padding: 0.5em;
+  overflow: auto;
+  line-height: 1rem;
+  color: black;
+  background-color: #f6f6f6; }
+  pre.numbered {
+    counter-reset: line-nos; }
+    pre.numbered span.line {
+      display: block;
+      margin-left: 3em; }
+      pre.numbered span.line:before {
+        display: block;
+        float: left;
+        margin-left: -3rem;
+        padding: 0.0715rem 1rem 0 0;
+        width: 3rem;
+        text-align: right;
+        content: counter(line-nos);
+        counter-increment: line-nos;
+        color: #666;
+        font-size: 0.857rem; }
+
+/* Buttons */
+button {
+  border: 1px solid #58a4ff;
+  background-color: transparent;
+  color: #58a4ff;
+  border-radius: 0;
+  margin: 0 0.5em;
+  padding: 0.5em 1em;
+  font-weight: normal;
+  cursor: pointer; }
+
+button:hover {
+  background-color: #58a4ff;
+  color: white; }
+
+button:active {
+  background-color: #069; }
+
+button.primary {
+  border-color: #f90;
+  color: #f90;
+  font-weight: 600; }
+
+button.primary:hover {
+  background-color: #f90; }
+
+button.primary:active {
+  background-color: #f60; }
+
+button.secondary {
+  border-color: #999;
+  color: #999; }
+
+button.secondary:hover {
+  background-color: #999;
+  color: white; }
+
+button.secondary:active {
+  background-color: #666; }
+
+button.compact {
+  padding: 0.25em 0.5em; }
+
+/* Alternate styling for design elements inside inverted parent */
+.inverted pre, .inverted code {
+  background-color: black;
+  color: #ccc; }
+
+.inverted table, .inverted table td {
+  border-color: #333; }
+
+.inverted th {
+  background-color: rgba(255, 255, 255, 0.05); }
+
+/*
+Houdini-specific styling rules
+ */
+#googlebox {
+  padding-top: 0.25em; }
+
+/* Actions */
+.action.item {
+  margin: 1em 0; }
+  .action.item > .label {
+    font-weight: bold; }
+    .action.item > .label > .keys {
+      margin-left: 1em; }
+
+/* Usages and arguments */
+.instants pre {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.15); }
+
+.instant-usages .usage {
+  margin-top: 0;
+  margin-bottom: 0; }
+
+.instant-usages .usage > .label {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0; }
+
+.instant-usages .usage > .content {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0; }
+
+.usagegroup {
+  margin: 1em 0; }
+
+.usage {
+  margin-top: 0;
+  margin-bottom: 0; }
+  .usage > .label {
+    margin: 0;
+    padding: 0.5em 0.5em 0.25em 2.25em;
+    text-indent: -2em;
+    background-color: rgba(0, 0, 0, 0.05); }
+  .usage > .content {
+    margin: 1em 0 1em 2em; }
+  .usage.empty {
+    margin-bottom: 0; }
+  .usage.empty > .label {
+    margin-bottom: 0; }
+  .usage.empty + li {
+    margin-top: 0; }
+
+.arg > .label {
+  font-weight: 600;
+  margin-bottom: 0; }
+  .arg > .label .version {
+    padding: 0.1em 1em;
+    background-color: #e0e0e0;
+    font-size: 0.857em;
+    border-radius: 0.5em; }
+
+.arg.returns > .label {
+  font-family: inherit;
+  font-weight: 700;
+  color: #ff9f23; }
+
+.arg .content {
+  margin-left: 2em; }
+
+.vexerror {
+  display: block;
+  font-size: 70%;
+  color: #f30; }
+
+.vexsignature {
+  position: relative;
+  color: #888; }
+
+.vexname {
+  color: black; }
+
+.vextype {
+  color: #8d31ae;
+  font-weight: 400; }
+
+.vexout {
+  color: #fc0; }
+
+.vexargtype {
+  position: relative; }
+
+.vexargtype > .vextype, .vexargtype > .vexpattern {
+  position: absolute;
+  bottom: 1.1em;
+  font-size: 70%; }
+
+.vexpattern {
+  color: #869aae;
+  font-weight: 500; }
+
+.vexarrayindic {
+  color: black;
+  font-weight: 500; }
+
+.vexstring {
+  color: #c39c79; }
+
+.vexvector, .vexvector2, .vexvector4 {
+  color: #8d31ae; }
+
+.vexmatrix, .vexmatrix2, .vexmatrix3, .vexmatrix4 {
+  color: #60bc8f; }
+
+.vexint {
+  color: #91a835; }
+
+.vexfloat {
+  color: #06C; }
+
+.vexvoid {
+  color: #ccc; }
+
+.vexbsdf {
+  color: #f90; }
+
+.globaltype {
+  text-align: right; }
+
+.globalmode {
+  opacity: 0.5;
+  font-size: 80%;
+  white-space: nowrap; }
+
+.suite-item {
+  clear: left;
+  margin: 1em 0; }
+
+.suite-label {
+  margin-top: 0;
+  float: left;
+  width: 16em;
+  overflow-wrap: break-word; }
+
+.suite-content {
+  margin-left: 16em;
+  padding-left: 1em; }
+
+/* Render properties */
+.properties_item > .label {
+  font-weight: bold;
+  margin-bottom: 0; }
+
+.properties_item > .content {
+  margin-left: 2em; }
+
+/* Nodes */
+.node_hidden h1.title, .node_deprecated h1.title {
+  text-decoration: line-through; }
+
+div.page-warning {
+  background-color: #ffc;
+  border: 2px solid #cc9;
+  padding: 0 1em;
+  margin: 1em 0; }
+
+p.node-deprecation-version {
+  font-size: 0.875em; }
+
+/* Houdini node examples */
+.example {
+  margin-top: 2em;
+  clear: left; }
+
+.example-buttons {
+  float: left;
+  width: 12em; }
+
+.example > .label {
+  font-weight: bold;
+  margin-left: 12em;
+  margin-bottom: 0; }
+
+.example > .content {
+  margin-left: 12em; }
+
+#toc .example-buttons {
+  float: none; }
+
+#toc .example > .label {
+  margin-left: 0; }
+
+#toc .example > .content {
+  margin-left: 0; }
+
+.example > .content > .summary {
+  margin-top: 0; }
+
+.egfor {
+  display: block;
+  font-weight: normal;
+  margin: 0;
+  font-size: 0.857em; }
+
+.connection_item {
+  margin-top: 1em; }
+  .connection_item > .label {
+    font-weight: bold;
+    margin-bottom: 0; }
+  .connection_item > .content {
+    margin-left: 2em; }
+
+/* HOM enum values */
+#enums-body h2.heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 1rem; }
+
+.values_item {
+  margin: 1em 0; }
+  .values_item > .label {
+    margin: 0; }
+    .values_item > .label .prefix {
+      font-size: 0.7em;
+      opacity: 0.5; }
+  .values_item > .content {
+    margin-bottom: 0; }
+
+.settings {
+  margin: 1em 0; }
+  .settings > .setting {
+    margin: 0.5em 0; }
+  .settings > .setting > .label {
+    width: 10rem;
+    font-weight: 600;
+    margin-left: 1.25rem; }
+    .settings > .setting > .label::before {
+      display: block;
+      position: absolute;
+      margin-left: -1.25rem;
+      font-family: "FontAwesome";
+      font-weight: normal;
+      font-size: 1rem;
+      content: "\f1de"; }
+  .settings > .setting > .content {
+    margin-left: 1.25rem; }
+    .settings > .setting > .content code {
+      overflow-wrap: break-word; }
+
+/* Shelves */
+.shelftab {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  /* This is better for small screens, once min() is better supported */
+  /* grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); */
+  grid-gap: 1rem;
+  /* This is the standardized property now, but has slightly less support */
+  gap: 1rem; }
+
+.shelftool {
+  margin: 0;
+  position: relative;
+  background-color: #f0f0f0;
+  border-radius: 0.5em;
+  padding: 0.5em 1em; }
+  .shelftool .shelficon {
+    position: absolute;
+    top: 0.5em;
+    left: 0.5em;
+    width: 2.5em;
+    height: 2.5em; }
+  .shelftool .text {
+    font-weight: bold; }
+  .shelftool .text, .shelftool .summary {
+    margin: 0 0 0 2.5em; }
