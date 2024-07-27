@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bookish"
+requires-python = ">=3.9"
+version = "1.0.0"
+description = "Programmable wiki documentation server"
+authors = [{ name = "Matt Chaput", email = "matt@squigglyline.org" }]
+dependencies = [
+  "Flask",
+  "Flask-Script",
+  "Pygments",
+  "Whoosh",
+  "libsass",
+  "nose",
+]
+optional-dependencies = { dev = [
+  "pyright>=1.1.296,<2.0.0",
+  "pytest>=7.2.1,<8.0.0",
+] }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["houdinihelp", "houdinihelp.*", "bookish", "bookish.*"]
+
+[project.scripts]
+houdini_help = "houdinihelp.cli:cli"
