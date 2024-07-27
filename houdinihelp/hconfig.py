@@ -1,173 +1,307 @@
 import os
-import os.path
+import sys
 
-from bookish.config import DefaultConfig, expandpath
-from bookish.stores import FileStore
-from bookish.stores import MountStore
-from bookish.stores import ZipTree
+from bookish.config import DefaultConfig
+from bookish.stores import expandpath
 
-from houdinihelp import hcoloring, hpages, hsearch, hstores, htextify
-try:
-    import hou
-except ImportError:
-    hou = None
+from houdinihelp.hcoloring import VexLexer, OpenCLLexer, HScriptLexer
+from houdinihelp.usd import UsdLexer
 
 
-if hou:
-    hou_home = hou.homeHoudiniDirectory()
-elif "HOUDINI_USER_PREF_DIR" in os.environ:
-    hou_home = os.environ["HOUDINI_USER_PREF_DIR"]
-else:
-    hou_home = "."
-
-if "HOUDINI_VERSION" in os.environ:
-    version = os.environ["HOUDINI_VERSION"]
-    major_version, minor_version, build_version = version.split(".")
-else:
-    version = major_version = minor_version = build_version = ""
+ver_major = ver_minor = ver_build = ""
+houdini_version = os.environ.get("HOUDINI_VERSION")
+if houdini_version:
+    ver_major, ver_minor, ver_build = houdini_version.split(".", 2)
 
 
-def houdini_docs(doc_dir, add_houdini_path=False, with_zip=False):
-    # Returns a list of Store objects
+class HoudniBaseConfig(DefaultConfig):
+    USE_HOU = True
+    DEBUG = False
+    LOGLEVEL = "WARNING"
+    PYGMENTS_CSS = "/static/css/pygments/autumn.css"
 
-    # Copy the default bookish list of stores which includes the base templates,
-    # grammar files, and static files
-    docs = list(DefaultConfig.DOCUMENTS)
-    # Add the documentation directory
-    docs.append(FileStore(doc_dir))
+    HOUDINI_VERSION_MAJOR = ver_major
+    HOUDINI_VERSION_MINOR = ver_minor
+    HOUDINI_VERSION_BUILD = ver_build
 
-    # Look for special directories relative to this Python module
-    base_dir = os.path.abspath(os.path.dirname(__file__))
+    # Extra documents to be added in user configuration (this is easier than
+    # extending DOCUMENTS)
+    EXTRA_DOCUMENTS = []
 
-    # Add Houdini-specific templates
-    templates_store = FileStore(os.path.join(base_dir, "templates"))
-    docs.append(MountStore(templates_store, "/templates"))
+    # A system file path to a directory in which to store cache files
+    CACHE_DIR = "$HOUDINI_USER_PREF_DIR/config/Help/cache"
 
-    # Add Houdini-specific static files
-    static_store = FileStore(os.path.join(base_dir, "static"))
-    docs.append(MountStore(static_store, "/static"))
+    # A system file path to a directory in which to store the full-text index
+    INDEX_DIR = "$HFS/houdini/config/Help/index"
 
-    if hou:
-        # Add HOM sources (nodes, shelf tools) to virtual file system
-        docs.append(hstores.HoudiniStore())
+    INDEX_USAGES = True
 
-        if add_houdini_path:
-            # Get all HOUDINIPATH/help directories
-            try:
-                helpdirs = hou.findDirectories("help")
-            except hou.OperationFailed:
-                helpdirs = []
-            # Add FireStores for them
-            docs += [FileStore(hd) for hd in helpdirs]
+    INDEX_IGNORE_FILE = None
 
-    if with_zip:
-        # Add a storage overlay to read files out of any zip files in the root
-        # directory
-        docs.append(ZipTree(doc_dir))
+    # True if the server should run an indexing thread in the background
+    ENABLE_BACKGROUND_INDEXING = False
+    # Number of seconds between background indexing runs
+    BACKGROUND_INDEXING_INTERVAL = 60
 
-    return docs
-
-
-class HoudiniBaseConfig(DefaultConfig):
     # Use a custom WikiPages class to get Houdini-specific page processors
-    PAGES_CLASS = hpages.HoudiniPages
+    PAGES_CLASS = "houdinihelp.hpages.HoudiniPages"
     # Use a custom Searchables class to get Houdini-specific indexed fields
-    SEARCHABLES = hsearch.HoudiniSearchables()
+    SEARCHABLES = "houdinihelp.hsearch.HoudiniSearchables"
 
+    TEXTIFY_CLASS = "houdinihelp.htextify.HoudiniTextifier"
+
+    # Virtual path to wiki rendering style for Houdini-specific markup
+    WIKI_STYLE = "/templates/hwiki.jinja2"
     # Virtual path to the template to use for wiki pages
-    DEFAULT_TEMPLATE = "/templates/hpage.jinja2"
+    TEMPLATE = "/templates/hpage.jinja2"
     # Virtual path to the template to use for search results
-    SEARCH_TEMPLATE = "/templates/hsearch.jinja2"
+    SEARCH_TEMPLATE = "/templates/hresults.jinja2"
+
+    LEXERS = {
+        "vex": VexLexer,
+        "ocl": OpenCLLexer,
+        "hscript": HScriptLexer,
+        "usd": UsdLexer,
+    }
 
     # Houdini-specific search shortcuts
     SHORTCUTS = [
-        {"shortcut": "n", "query": "type:node", "desc": "All nodes"},
-        {"shortcut": "s", "query": "category:node/sop",
-         "desc": "Geometry nodes (SOPs)"},
-        {"shortcut": "d", "query": "category:node/dop",
-         "desc": "Dynamics nodes (DOPs)"},
-        {"shortcut": "o", "query": "category:node/obj",
-         "desc": "Object nodes"},
+        {"shortcut": "n",
+         "query": "type:node",
+         "desc": "All nodes",
+         },
+        {"shortcut": "s",
+         "query": "category:node/sop",
+         "desc": "Geometry nodes (SOPs)",
+         },
+        {"shortcut": "d",
+         "query": "category:node/dop",
+         "desc": "Dynamics nodes (DOPs)",
+         },
+        {"shortcut": "o",
+         "query": "category:node/obj",
+         "desc": "Object nodes",
+         },
         {"shortcut": "v",
          "query": "(category:vex OR category:node/vop)",
-         "desc": "VEX and VOPs"},
-        {"shortcut": "r", "query": "(category:node/out OR type:property)",
-         "desc": "Rendering"},
-        {"shortcut": "p", "query": "category:hom*",
-         "desc": "Python scripting (HOM)"},
-        {"shortcut": "e", "query": "type:expression",
-         "desc": "Expression functions"},
+         "desc": "VEX and VOPs",
+         },
+        {"shortcut": "vo",
+         "query": "category:node/vop",
+         "desc": "VOPs",
+         },
+        {"shortcut": "vx",
+         "query": "type:vex",
+         "desc": "VEX functions",
+         },
+        {"shortcut": "r",
+         "query": "(category:node/out OR type:property)",
+         "desc": "Render nodes and properties",
+         },
+        {"shortcut": "t",
+         "query": "category:node/top",
+         "desc": "TOP nodes",
+         },
+        {"shortcut": "p",
+         "query": "category:hom*",
+         "desc": "Python scripting (HOM)",
+         },
+        {"shortcut": "e",
+         "query": "type:expression",
+         "desc": "Expression functions",
+         },
     ]
 
     EXTRA_SHORTCUTS = []
 
     # Houdini specific category ordering in search results
     CATEGORIES = """
-    _ tool node/sop node/dop node/obj node/vop node/out node/cop2 node/chop
-    vex example homclass hommethod homfunction hommodule
-    expression hscript property
-    """
-
-    # Houdini specific Pygments lexers
-    VEX_LEXER = hcoloring.VexLexer
-    HSCRIPT_LEXER = hcoloring.HScriptLexer
-    TEXTIFY_CLASS = htextify.HoudiniTextifier
+        _ tool
+        node/sop node/dop node/obj node/vop node/out node/cop2 node/chop node/vex
+        node/top attribute vex example homclass hommethod homfunction hommodule
+        expression hscript property env_variable
+        """
 
     AUTO_COMPILE_SCSS = False
+    
 
-    VARS = DefaultConfig.VARS
-    VARS["HOUDINI_VERSION"] = version
-    VARS["MAJOR_VERSION"] = major_version
-    VARS["MINOR_VERSION"] = minor_version
-    VARS["BUILD_VERSION"] = build_version
+_HFS_MODULE_PATH = \
+    "$HFS/houdini/python{}.{}libs".format(
+        sys.version_info.major, sys.version_info.minor)
 
 
-class HoudiniDevConfig(HoudiniBaseConfig):
-    if "SH" in os.environ:
-        houdini_base = expandpath("$SH/")
+class HoudiniHfsConfig(HoudniBaseConfig):
+    SUPPORT_DOCUMENTS = [
+        {
+            "type": "mount",
+            "source": "{}/bookish/templates".format(_HFS_MODULE_PATH),
+            "target": "/templates",
+        }, {
+            "type": "mount",
+            "source": "{}/bookish/grammars".format(_HFS_MODULE_PATH),
+            "target": "/grammars",
+        },
+        {
+            "type": "mount",
+            "source": "{}/houdinihelp/templates".format(_HFS_MODULE_PATH),
+            "target": "/templates",
+        },
+        {
+            "type": "mount",
+            "source": "$HFS/houdini/toolbar",
+            "target": "/toolbar",
+        },
+        {
+            "type": "mount",
+            "source": "$HFS/houdini/config",
+            "target": "/icon_config"
+        }
+    ]
+
+    # Storage spec for actual user documents (to be interpreted by
+    # stores.store_from_spec())
+    DOCUMENTS = [
+        {
+            # Get documents from @/help (this includes $HFS/houdini/help,
+            # but we can't guarantee getting the path will work during the
+            # build)
+            "type": "object",
+            "classname": "houdinihelp.hstores.HoudiniPathStore",
+        },
+        "$HFS/houdini/help",
+        {
+            # Adds ability to read docs out of .zip files in
+            # $HFS/houdini/help
+            "type": "object",
+            "classname": "bookish.stores.ZipTree",
+            "args": {
+                "dirpath": expandpath("$HFS/houdini/help"),
+            }
+        }, {
+            "type": "wrapper",
+            "classname": "houdinihelp.hstores.ManagerRedirectStore",
+            "child": {
+                "type": "mount",
+                "source": {
+                    "type": "object",
+                    "classname": "bookish.stores.ZipStore",
+                    "args": {
+                        "zipfilepath": "$HFS/houdini/help/nodes.zip"
+                    }
+                },
+                "target": "/nodes",
+            }
+        }, {
+            # Adds ability to read help out of assets
+            "type": "object",
+            "classname": "houdinihelp.hstores.AssetStore",
+        }, {
+            # Adds ability to read help out of shelf tools
+            "type": "object",
+            "classname": "houdinihelp.hstores.ShelfStore",
+        },
+    ]
+
+    STATIC_DIRS = {
+        "/static": "$HFS/houdini/python${PYTHON_VERSION}libs/bookish/static",
+        "/hstatic": "$HFS/houdini/python${PYTHON_VERSION}libs/houdinihelp/hstatic",
+        "/videos": "$HFS/houdini/help/videos",
+    }
+    STATIC_LOCATIONS = (
+        "/static", "/hstatic", "/images", "/videos"
+    )
+    ARCHIVE_DIRS = {
+        "/icons": "$HFS/houdini/config/Icons/icons.zip",
+        "/images": "$HFS/houdini/help/images.zip",
+    }
+
+
+class HoudiniShdConfig(HoudniBaseConfig):
+    SUPPORT_DOCUMENTS = [
+        {
+            "type": "mount",
+            "source": "$SHH/bookish/bookish/templates",
+            "target": "/templates",
+        }, {
+            "type": "mount",
+            "source": "$SHH/bookish/bookish/grammars",
+            "target": "/grammars",
+        },
+        {
+            "type": "mount",
+            "source": "$SHH/bookish/houdinihelp/templates",
+            "target": "/templates",
+        },
+        {
+            "type": "mount",
+            "source": "$SHS/config/toolbar",
+            "target": "/toolbar",
+        },
+        {
+            "type": "mount",
+            "source": "$SHS/icons",
+            "target": "/icon_config"
+        },
+        {
+            "type": "mount",
+            "source": "$SHH/bookish/houdinihelp/hstatic",
+            "target": "/hstatic"
+        }
+    ]
+
+    # Storage spec for actual user documents (to be interpreted by
+    # stores.store_from_spec())
+    DOCUMENTS = [
+        "$SHH/documents",
+        {
+            "type": "mount",
+            "source": "$SHS/icons/",
+            "target": "/icons",
+        },
+    ]
+
+    STATIC_LOCATIONS = (
+        "/static", "/images", "/videos", "/icons",
+    )
+    ARCHIVE_DIRS = {}
+
+
+def read_houdini_config(cfg=None, config_file=None, root_path=".",
+                        use_houdini_path=True, with_source=False):
+    from bookish.config import read_config
+
+    if os.environ.get("H_BUILD_WITH_SOURCE_HELP"):
+        with_source = True
+    config_obj = HoudiniShdConfig if with_source else HoudiniHfsConfig
+
+    cfg = read_config(cfg, config_file=config_file, root_path=root_path,
+                      config_obj=config_obj)
+
+    if not config_file and use_houdini_path:
+        try:
+            import hou
+            try:
+                fname = hou.findFile("config/Help/bookish.cfg")
+            except hou.OperationFailed:
+                pass
+            else:
+                cfg.from_pyfile(fname)
+        except ImportError:
+            pass
+
+    if "HOUDINI_VERSION" in os.environ:
+        version = os.environ["HOUDINI_VERSION"]
     else:
-        houdini_base = expandpath("~/dev/src/houdini")
+        version = "1.0.234"
 
-    DEBUG = True
-    DOCUMENTS = houdini_docs(os.path.join(houdini_base, "help/documents"),
-                             add_houdini_path=False)
+    cfg["HOUDINI_VERSION"] = version
+    major, minor, build = version.split(".", 2)
+    cfg["HOUDINI_MAJOR"] = major
+    cfg["HOUDINI_MINOR"] = minor
+    cfg["HOUDINI_BUILD"] = build
 
-    EDITABLE = True
-
-    # Add the icons source directory
-    icons_store = FileStore(os.path.join(houdini_base, "support/icons"))
-    DOCUMENTS.append(MountStore(icons_store, "/icons"))
-
-    # Store the cache and search index in the docs build directory
-    build_dir = os.path.join(houdini_base, "help/build")
-    CACHE_DIR = os.path.join(build_dir, "cache")
-    INDEX_DIR = os.path.join(build_dir, "index")
-
-    ENABLE_BACKGROUND_INDEXING = False
-    AUTO_COMPILE_SCSS = True
+    return cfg
 
 
-class HoudiniAppConfig(HoudiniBaseConfig):
-    doc_dir = expandpath("$HFS/houdini/help")
-    build_dir = expandpath(hou_home + "/config/Help")
 
-    DEBUG = False
 
-    # Copy the default bookish file system which includes the base templates,
-    # grammar files, and static files
-    DOCUMENTS = houdini_docs(doc_dir, add_houdini_path=True, with_zip=True)
-
-    # Store the cache in the user's prefs dir
-    CACHE_DIR = os.path.join(build_dir, "cache")
-
-    INDEX_DIR = expandpath("$HFS/houdini/config/Help/index")
-    ENABLE_BACKGROUND_INDEXING = False
-    AUTO_COMPILE_SCSS = False
-
-    # Get the read-only index of the "factory" files from $HFS
-    # STATIC_INDEX_DIR = expandpath("$HFS/houdini/config/Help/index")
-    # Store the dynamic index in the user's prefs dir
-    # INDEX_DIR = os.path.join(build_dir, "index")
-
-    LOGLEVEL = "WARNING"
-    # LOGFILE = os.path.join(build_dir, "bookish.log")

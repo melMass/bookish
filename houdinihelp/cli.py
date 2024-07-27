@@ -27,439 +27,72 @@
 
 from __future__ import print_function
 import os.path
-import bisect
-import codecs
+import errno
 import shutil
+import sys
 
-from flask.ext.script import Manager
-from flask.ext.script.commands import InvalidCommand
+import click
 
-from bookish import flaskapp, functions, paths, wikipages, util
+from bookish import paths, util
+from bookish.stores import expandpath
 
-from houdinihelp import server
-
-
-manager = Manager(server.get_houdini_app)
-manager.add_option("-C", "--config", dest="config_file", required=False)
-manager.add_option("-O", "--object", dest="config_obj", required=False)
-manager.add_option("-l", "--logfile", dest="log_file", required=False)
-manager.add_option("-L", "--loglevel", dest="log_level", required=False)
+from houdinihelp import hconfig, hpages
 
 
-def _exp(path):
-    return os.path.abspath(os.path.expanduser(os.path.expandvars(path)))
+# Helper functions
+
+def _mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc:
+        if exc.errno != errno.EEXIST or not os.path.isdir(path):
+            raise
 
 
-def _parse_vars(vars):
+def _parse_vars(strings):
     d = {}
-    for pair in vars.split(","):
-        name, value = pair.split("=", 1)
+    for string in strings:
+        name, value = string.split("=", 1)
         d[name] = value
     return d
 
 
-def empty_cache(pages):
-    cs = pages.cachestore
-    if cs:
-        for path in cs.list_all():
-            manager.app.logger.debug("Deleting cache %s", path)
-            cs.delete(path)
-
-
-def get_prefixed_paths(pages, prefix):
-    prefixdir = prefix if prefix.endswith("/") else paths.parent(prefix)
-    for path in pages.store.list_all(prefixdir):
-        if not path.startswith(prefix):
-            continue
-        yield path
-
-
-def parse_page(path, **kwargs):
-    pages = flaskapp.get_wikipages(manager.app)
-    jsondata = pages.json(path, **kwargs)
-    return jsondata
-
-
-@manager.command
-def clear_cache():
-    pages = flaskapp.get_wikipages(manager.app)
-    empty_cache(pages)
-
-
-@manager.command
-def serve(host="0.0.0.0", port=8080, debug=False, vars=None, bgindex=False):
-    if vars:
-        manager.app.jinja_env.globals.update(_parse_vars(vars))
-
-    manager.app.config["ENABLE_BACKGROUND_INDEXING"] = bgindex
-    manager.app.run(host=host, port=int(port), debug=debug)
-
-
-@manager.command
-def html(path):
-    pages = flaskapp.get_wikipages(manager.app)
-    print(pages.html(path))
-
-
-@manager.command
-def missing(images=False, links=False, unused=False, prefix="/", verbose=False):
-    if not (images or links or unused):
-        images = links = unused = True
-
-    pages = flaskapp.get_wikipages(manager.app)
-    all_images = set()
-    used_images = set()
-    for path in get_prefixed_paths(pages, prefix):
-        if paths.extension(path) in (".png", ".jpg", ".jpeg", ".gif"):
-            all_images.add(path)
-
-        if not pages.is_wiki_source(path):
-            continue
-
-        if verbose:
-            print(path)
-
-        printed = False
-        json = pages.json(path)
-        for link in functions.find_links(json):
-            value = link["value"]
-            scheme = link.get("scheme")
-
-            if value.startswith("#") or scheme in ("Icon", "Smallicon", "Largeicon"):
-                continue
-
-            fullpath = link.get("fullpath")
-            if not fullpath:
-                continue
-
-            if pages.is_wiki(fullpath):
-                fullpath = pages.source_path(fullpath)
-            exists = pages.exists(fullpath)
-
-            isimage = scheme in ("Image", "Anim")
-            if isimage:
-                used_images.add(fullpath)
-
-            if exists:
-                continue
-
-            if (images and isimage) or (links and not isimage):
-                if not verbose and not printed:
-                    print(path)
-                    printed = True
-                print("    ", value, "  ", fullpath)
-
-    if unused:
-        unused_images = all_images - used_images
-        bytes = 0
-        for imgpath in sorted(unused_images):
-            size = pages.size(imgpath)
-            bytes += size
-            print("Unused image:", imgpath, size)
-        print(len(unused_images), "unused images (", bytes, ") out of", len(all_images))
-
-
-@manager.command
-def generate(dirpath, prefix="/", vars=None, longest=10, cache=True,
-             nocache=False):
-    pages = flaskapp.get_wikipages(manager.app)
-    logger = manager.app.logger
-    dirpath = _exp(dirpath)
-    indexer = flaskapp.get_indexer(manager.app)
-    searcher = indexer.searcher()
-
-    if nocache:
-        empty_cache(pages)
-
-    count = 0
-    largest = []
-
-    if vars:
-        vars = _parse_vars(vars)
-        manager.app.config.setdefault("VARS", {}).update(vars)
-
-    t = util.perf_counter()
-    for path in get_prefixed_paths(pages, prefix):
-        if not pages.is_wiki_source(path):
-            continue
-
-        logger.debug("Generating %s", path)
-        count += 1
-
-        tt = util.perf_counter()
-        html = pages.html(path, save_to_cache=cache, searcher=searcher)
-        tt = util.perf_counter() - tt
-
-        htmlpath = paths.basepath(path) + ".html"
-        filepath = os.path.join(dirpath, htmlpath[1:])
-
-        # Make sure the destination directory exists, then create the file.
-        parentdirpath = os.path.dirname(filepath)
-        if not os.path.exists(parentdirpath):
-            os.makedirs(parentdirpath)
-        with open(filepath, "w") as f:
-            f.write(html.encode("utf8"))
-
-        # Keep track of slowest pages
-        if len(largest) < longest or tt > largest[0][0]:
-            if len(largest) >= longest:
-                largest.pop(0)
-            bisect.insort(largest, (tt, path))
-    totaltime = util.perf_counter() - t
-
-    logger.info("Generated %s files in %s secs", count, totaltime)
-    logger.info("Average %s sec per page", totaltime / count)
-    logger.info("Top %s longest times:")
-    for gentime, path in largest:
-        logger.info("%s | %03.04f secs ", path, gentime)
-
-
-@manager.command
-def index(prefix="/", clean=False, nocache=False, option=None, touchfile=None,
-          usages=False):
-    pages = flaskapp.get_wikipages(manager.app)
-    indexer = flaskapp.get_indexer(manager.app)
-    logger = manager.app.logger
-
-    if usages:
-        _index_usages(pages, logger)
-
-    if option:
-        key, value = option.split("=", 1)
-        value = util.pyliteral(value, fallback_to_string=False)
-        indexer.set_option(key, value)
-
-    if nocache:
-        empty_cache(pages)
-
-    changed = indexer.update(pages, prefix=prefix, clean=clean)
-
-    if changed and touchfile:
-        # Touch the change file to indicate something changed.
-        # This is to help the Makefile
-        open(touchfile, "a").close()
-
-
-@manager.command
-def index_info():
-    pages = flaskapp.get_wikipages(manager.app)
-    indexer = flaskapp.get_indexer(manager.app)
-    indexer.dump(pages)
-
-
-def _index_usages(pages, logger, prefix="/examples/nodes/"):
-    from houdinihelp.hsearch import usages_for_otl
-
-    # Find all .otl files under the given prefix
-    changed = False
-    store = pages.store
-
-    for path in store.list_all(prefix):
-        if not pages.is_wiki_source(path):
-            continue
-
-        # Look for an hda or otl file with the same name as this wiki file
-        bp = paths.basepath(path)
-        exts = (".hda", ".otl")
-        for ext in exts:
-            p = bp + ext
-            if store.exists(p):
-                otlpath = p
-                break
-        else:
-            continue
-
-        # Check if there's a usages file already and if it's newer than the otl
-        usagespath = bp + ".usages"
-        if store.exists(usagespath):
-            otlmod = store.last_modified(otlpath)
-            usagesmod = store.last_modified(usagespath)
-            if otlmod <= usagesmod:
-                continue
-
-        # Get the real file path corresponding to the OTL's virtual path
-        filepath = pages.file_path(otlpath)
-        if filepath:
-            print("Generating usages for %s" % filepath)
-            # Find all node usages in the OTL
-            usages = usages_for_otl(filepath)
-
-            # Write the usages to a file alongside the otl file
-            basename = paths.basename(usagespath)
-            parentdir = os.path.dirname(filepath)
-            usagesfile = os.path.join(parentdir, basename)
-            with open(usagesfile, "wb") as outfile:
-                output = "\n".join(usages) + "\n"
-                outfile.write(output.encode("utf8"))
-            changed = True
-
-    return changed
-
-
-@manager.command
-def index_usages(prefix="/examples/nodes/", touchfile=None):
-    pages = flaskapp.get_wikipages(manager.app)
-    logger = manager.app.logger
-
-    changed = _index_usages(pages, logger)
-
-    if changed and touchfile:
-        # Touch the change file to indicate something changed.
-        # This is to help the Makefile
-        open(touchfile, "a").close()
-
-
-@manager.command
-def search(query, limit=None, stored=False):
-    import pprint
-
-    indexer = flaskapp.get_indexer(manager.app)
-    q = indexer.query()
-    q.set(query)
-    if limit:
-        q.set_limit(int(limit))
-
-    for hit in q.search():
-        if stored:
-            pprint.pprint(dict(hit))
-        else:
-            print(hit["path"], hit["title"])
-
-
-@manager.command
-def textify(prefix, width=None):
-    pages = flaskapp.get_wikipages(manager.app)
-    txcls = flaskapp.get_textifier(manager.app, width=width)
-    indexer = flaskapp.get_indexer(manager.app)
-    searcher = indexer.searcher()
-
-    for path in get_prefixed_paths(pages, prefix):
-        if pages.is_wiki_source(path):
-            jsondata = pages.json(path, searcher=searcher)
-            output = txcls(jsondata).transform()
-            print(output)
-
-
-@manager.command
-def prewarm(prefix="/"):
-    pages = flaskapp.get_wikipages(manager.app)
-    for path in pages.store.list_all(prefix):
-        print(path)
-        _ = pages.json(path, save_to_cache=True)
-
-
-# @manager.command
-# def preheat(prefix="/"):
-#     pages = flaskapp.get_wikipages(manager.app)
-#     for path in pages.store.list_all(prefix):
-#         print(path)
-#         _ = pages.html(path, save_to_cache=True)
-
-
-@manager.command
-def profile(path):
-    # from bookish.grammars.wiki import blocks, grammar
-    #
-    # pages = manager.app.config.get("bookish_pages")
-    # src = pages.content(path)
-    # src = wiki.condition_string(src)
-    #
-    # ctx = wiki.bootstrap_context()
-    # i = 0
-    # blist = []
-    # t = util.perf_counter()
-    # while i < len(src):
-    #     tt = util.perf_counter()
-    #     out, newi = blocks(src, i, ctx)
-    #     tt = util.perf_counter() - tt
-    #     if not isinstance(out, dict):
-    #         from bookish.parser import parser
-    #         lines = parser.Lines(src)
-    #         line, col = lines.line_and_col(i)
-    #         print("Miss at line", line, "column", col, "(char %s)" % i)
-    #         print(src[i-10:i+10])
-    #         break
-    #     i = newi
-    #     blist.append((tt, out.get("type"),
-    #                   repr(functions.string(out.get("text"))[:40])))
-    # t = util.perf_counter() - t
-    # blist.sort()
-    # for tt, typename, txt in blist:
-    #     print(tt, typename, txt)
-    # print(t)
-
-    import cProfile
-    cProfile.run("parse_page(%r, conditional=False)" % path, sort="time")
-
-
-@manager.command
-def debug_wiki(path):
-    from bookish.grammars.wiki import blocks
-    from bookish.parser import parser, rules
-
-    pages = flaskapp.get_wikipages(manager.app)
-    src = wikipages.condition_string(pages.content(path))
-
-    ctx = wikipages.bootstrap_context()
-    i = 0
-    blist = []
-    t = util.perf_counter()
-    missed = False
-    while rules.streamend.accept(src, i, ctx)[0] is parser.Miss:
-        tt = util.perf_counter()
-        out, newi = blocks(src, i, ctx)
-        tt = util.perf_counter() - tt
-
-        if not isinstance(out, dict):
-            lines = parser.Lines(src)
-            line, col = lines.line_and_col(i)
-            print("Miss at line", line, "column", col, "(char %s)" % i)
-            print(repr(src[i:i+10]))
-            missed = True
-            break
-
-        i = newi
-        blist.append((tt, out.get("type"),
-                      repr(functions.string(out.get("text"))[:40])))
-    t = util.perf_counter() - t
-    print("%0.06f" % t)
-
-    if not missed:
-        blist.sort(reverse=True)
-        for tt, typename, txt in blist:
-            print("%0.06f" % tt, typename, txt)
-
-
-@manager.command
-def archive(dirpath, zfile, force=False, include=None, exclude=None):
+def _archive_tree(dirpath, zfile, force, include, exclude):
     import zipfile
 
-    logger = manager.app.logger
-
-    dirpath = _exp(dirpath)
+    dirpath = expandpath(dirpath)
     filepaths = list(util.file_paths(dirpath, include, exclude))
-
-    def _up_to_date():
-        if not os.path.exists(zfile):
-            return False
-        ziptime = os.path.getmtime(zfile)
-        return not any(os.path.getmtime(p) > ziptime for p in filepaths)
-
-    # Don't bother archiving if zip is up-to-date
-    if not force and _up_to_date():
-        return
-
-    logger.info("Archiving directory %s to file %s", dirpath, zfile)
     t = util.perf_counter()
+
+    if os.path.exists(zfile):
+        uptodate = True
+        ztime = os.path.getmtime(zfile)
+        # print("Zip file mod time=", ztime)
+        for p in filepaths:
+            ptime = os.path.getmtime(p)
+            # print(p, ptime, ptime > ztime)
+            if ptime > ztime:
+                uptodate = False
+                break
+
+        if uptodate:
+            # print("%s is up to date" % zfile)
+            return
+
     count = 0
+
+    # Ensure the destination directory exists.
+    dest_dir = os.path.dirname(zfile)
+    _mkdir_p(dest_dir)
+
+    print("Archiving", dirpath, "to", zfile)
     zf = zipfile.ZipFile(zfile, "w", compression=zipfile.ZIP_DEFLATED)
     for path in filepaths:
         rp = os.path.relpath(path, dirpath).replace("\\", "/")
         zf.write(path, arcname=rp)
-        logger.debug("Adding %s", path)
         count += 1
-    logger.info("Archived %s files in %.01f sec",
-                count, util.perf_counter() - t)
+
+    print("Archived %s files in %.01f sec" % (count, util.perf_counter() - t))
     zf.close()
 
 
@@ -470,51 +103,324 @@ def _copy_file(srcpath, destpath, force, logger=None):
         or os.path.getmtime(srcpath) > os.path.getmtime(destpath)
     ):
         parent = os.path.dirname(destpath)
-        if not os.path.exists(parent):
-            os.makedirs(parent)
-
-        if logger:
-            logger.debug("Copying %s to %s", srcpath, destpath)
-
-        shutil.copy(srcpath, destpath)
+        _mkdir_p(parent)
+        # print("Copying %s to %s" % (srcpath, destpath))
+        shutil.copy2(srcpath, destpath)
+        return True
 
 
-def _copy_tree(srcdir, destdir, force=False, include=None, exclude=None,
-               logger=None):
+def _copy_tree(srcdir, destdir, force=False, include=None, exclude=None):
     count = 0
     for srcpath in util.file_paths(srcdir, include, exclude):
         relpath = os.path.relpath(srcpath, srcdir)
         destpath = os.path.join(destdir, relpath)
-
-        if _copy_file(srcpath, destpath, force, logger=logger):
+        if _copy_file(srcpath, destpath, force):
             count += 1
     return count
 
 
-@manager.command
-def copy_files(srcdir, destdir, force=False, include=None, exclude=None):
-    logger = manager.app.logger
-    srcdir = _exp(srcdir)
-    destdir = _exp(destdir)
+class Dots(object):
+    def __init__(self, width=72):
+        self.count = 0
+        self.width = width
 
-    logger.info("Copying %s to %s", srcdir, destdir)
+    def dot(self):
+        self.count += 1
+        print(".", end="\n" if not self.count % self.width else "")
+
+
+# Group
+
+# def get_config(ctx, scriptinfo):
+#     from houdinihelp.server import get_houdini_app
+# 
+#     params = ctx.find_root().params
+# 
+#     # For build steps that can run before hou is built, prevent the hou module
+#     # from being loaded on subsequent incremental builds to avoid potential
+#     # errors on Windows if a library is being built at the same time.
+#     if params["disablehou"]:
+#         import sys
+#         sys.modules['hou'] = None
+# 
+#     return get_houdini_app(
+#         config_file=params["config"],
+#         config_obj=params["object"],
+#         logfile=params["logfile"],
+#         loglevel=params["loglevel"],
+#         debug=params["debug"],
+#     )
+
+
+@click.group()
+@click.option("-C", "--config", type=str)
+@click.option("-l", "--logfile", type=click.Path())
+@click.option("-L", "--loglevel", type=str)
+@click.option("-d", "--debug", is_flag=True)
+@click.option("--disablehou", is_flag=True)
+@click.pass_context
+def cli(ctx, config, logfile, loglevel, debug, disablehou):
+    """Command line tool for running Houdini help tasks."""
+
+    if disablehou:
+        import sys
+        sys.modules["hou"] = None
+
+    cfg = hconfig.read_houdini_config(config_file=config,
+                                      root_path=os.getcwd(),
+                                      use_houdini_path=not disablehou)
+
+    if logfile:
+        cfg["LOGFILE"] = logfile
+    if loglevel:
+        cfg["LOGLEVEL"] = loglevel
+    if debug is not None:
+        cfg["DEBUG"] = debug
+
+    ctx.obj = hpages.pages_from_config(cfg)
+
+
+# Commands
+
+@cli.command()
+@click.pass_obj
+def clear_cache(pages):
+    """Clears all files from the wiki JSON cache."""
+
+    pages.cache.empty()
+
+
+@cli.command()
+@click.option("-h", "--host", default="0.0.0.0")
+@click.option("-p", "--port", type=int, default=8080)
+@click.option("--debug", is_flag=True, default=False)
+@click.option("--vars", "vars_", type=str, default=None)
+@click.option("--bgindex", type=bool, default=None)
+@click.pass_obj
+def serve(pages, host, port, debug, vars_, bgindex):
+    """Starts a serving help pages over HTTP."""
+
+    from houdinihelp.server import start_server
+
+    cfg = pages.config
+    if vars_:
+        cfg.update(_parse_vars(vars_))
+    if bgindex is not None:
+        cfg["ENABLE_BACKGROUND_INDEXING"] = bgindex
+
+    start_server(host, port, override_config=cfg, debug=debug)
+
+
+@cli.command()
+@click.argument("path", type=str, required=True)
+@click.pass_obj
+def html(pages, path):
+    """Outputs the rendered HTML for a wiki path."""
+
+    print(pages.html(path))
+
+
+@cli.command()
+@click.option("--images/--noimages", "images", default=True)
+@click.option("--links/--nolinks", "links", default=True)
+@click.pass_obj
+def missing(pages, images, links):
+    """Generates a list of broken links and unused images."""
+
+    from bookish.testing import find_missing
+
+    print("Reading pages")
     t = util.perf_counter()
-    count = _copy_tree(srcdir, destdir, force, include, exclude, logger)
-    logger.info("Copied %s files in %.01f sec", count, util.perf_counter() - t)
+    misses, unused_images = find_missing(pages, images, links)
+
+    if images or links:
+        print("\nBROKEN LINKS")
+        last_path = None
+        for path, value, linkpath in misses:
+            if path != last_path:
+                print(path + ":")
+                last_path = path
+            print("    %s (%s)" % (value, linkpath))
+
+    print("\nUNUSED IMAGES")
+    for imgpath in sorted(unused_images):
+        print(imgpath)
 
 
-@manager.command
-def copy_help(srcdir, destdir, force=False, zipdirs=None, include=None,
-              exclude=None):
-    logger = manager.app.logger
-    srcdir = _exp(srcdir)
-    destdir = _exp(destdir)
+@cli.command()
+@click.argument("dirpath", type=click.Path(exists=True, file_okay=False),
+                required=False)
+@click.option("-p", "--prefix", type=str, default="/")
+@click.option("--cache/--no-cache", default=True)
+@click.option("-v", "--var", "vars_", multiple=True)
+@click.option("-j", "--procs", type=int, default=1)
+@click.option("--no-output", type=bool, default=False)
+@click.pass_obj
+def generate(pages, dirpath, prefix, cache, vars_, procs, no_output):
+    """Generates HTML for a tree of wiki pages into a directory."""
 
-    logger.info("Copying help from %s to %s", srcdir, destdir)
+    pages.config.update(_parse_vars(vars_))
+    print("Building path list")
+    pathlist = sorted(p for p in util.get_prefixed_paths(pages, prefix)
+                      if pages.is_wiki_source(p) and pages.exists(p))
+    t = util.perf_counter()
+
+    if procs == 1:
+        from bookish.wiki.wikipages import write_html_output
+        indexer = pages.indexer()
+        searcher = indexer.searcher()
+        for path in pathlist:
+            print("Generating", path)
+            write_html_output(pages, path, dirpath, cache=cache,
+                              searcher=searcher)
+    else:
+        from bookish.wiki.wikipages import write_html_output_multi
+        write_html_output_multi(pages, dirpath, procs, pathlist)
+
+    print("Total time", util.perf_counter() - t)
+
+
+@cli.command(name="index")
+@click.option("--clean", is_flag=True)
+@click.option("--optimize", is_flag=True)
+@click.option("--touchfile", type=click.Path(dir_okay=False, writable=True),
+              default=None)
+@click.pass_obj
+def reindex(pages, clean, optimize, touchfile):
+    """Updates the full text index."""
+
+    indexer = pages.indexer()
+    changed = indexer.update(pages, clean=clean, optimize=optimize)
+    if changed:
+        print("Index updated")
+        if touchfile:
+            with open(touchfile, "w"):
+                os.utime(touchfile, None)
+    else:
+        print("Nothing to do")
+
+
+@cli.command()
+@click.argument("query", nargs=-1)
+@click.option("-l", "--limit", type=int, default=0)
+@click.pass_obj
+def search(pages, query, limit=None, stored=False):
+    """Prints the result of a search query."""
+
+    indexer = pages.indexer()
+
+    q = indexer.query()
+    q.set(" ".join(query))
+
+    if limit:
+        q.set_limit(int(limit))
+
+    import pprint
+    for hit in q.search():
+        if stored:
+            pprint.pprint(dict(hit))
+        else:
+            print(hit["path"], hit["title"])
+
+
+@cli.command()
+@click.argument("prefix", required=True)
+@click.option("--width", type=int, default=72)
+@click.option("-o", "--outfile", type=click.Path(dir_okay=False, writable=True))
+@click.option("-f", "--force", is_flag=True)
+@click.pass_obj
+def textify(pages, prefix, width, outfile, force):
+    """Prints the textified version of a wiki page or tree of wiki pages."""
+
+    from datetime import datetime
+    import random
+
+    store = pages.store
+    logger = pages.logger
+    indexer = pages.indexer()
+    searcher = indexer.searcher()
+    # textifier_class = pages.textifier()
+
+    all_paths = list(util.get_prefixed_paths(pages, prefix))
+    # Check if we can skip generating the file if the existing
+    if outfile and os.path.exists(outfile) and not force:
+        outtime = datetime.utcfromtimestamp(os.path.getmtime(outfile))
+        uptodate = True
+        for path in all_paths:
+            lastmod = store.last_modified(path)
+            if lastmod > outtime:
+                logger.info("%s (%s) is out of date compared to %s (%s)",
+                            outfile, outtime, path, lastmod)
+                uptodate = False
+                break
+        if uptodate:
+            logger.info("%s is up to date", outfile)
+            return
+
+    tt = util.perf_counter()
+    if outfile:
+        tempname = outfile + "." + str(random.randint(1, 100000))
+        stream = open(tempname, "wb")
+    else:
+        stream = sys.stdout
+
+    for path in all_paths:
+        if pages.is_wiki_source(path):
+            logger.debug("Textifying %s", path)
+            jsondata = pages.json(path, searcher=searcher)
+            logger.debug("from_cache=%s", jsondata.get("from_cache"))
+
+            t = util.perf_counter()
+            output = pages.textify(jsondata, path=path)
+            logger.debug("Textifying took %0.04f", util.perf_counter() - t)
+
+            stream.write(output.encode("utf-8"))
+            stream.write(b"\n")
+
+    if outfile:
+        stream.close()
+        shutil.move(tempname, outfile)
+        tt = util.perf_counter() - tt
+        logger.info("Textifying %s took %f s", outfile, tt)
+
+
+@cli.command()
+@click.argument("dirpath", type=click.Path(exists=True, file_okay=False),
+                required=True)
+@click.argument("zipfile", type=click.Path(dir_okay=False, writable=True),
+                required=True)
+@click.option("-f", "--force", is_flag=True)
+@click.option("--include", type=str)
+@click.option("--exclude", type=str)
+def archive(dirpath, zipfile, force, include, exclude):
+    """Builds a zip archive."""
+
+    # Delegate to a helper function, because copy_help needs to call it too, and
+    # click doesn't like anyone else calling functions marked as commands
+    _archive_tree(dirpath, zipfile, force, include, exclude)
+
+
+@cli.command()
+@click.argument("srcdir", type=click.Path(exists=True, file_okay=False),
+                required=True)
+@click.argument("destdir", type=click.Path(exists=True, file_okay=False),
+                required=True)
+@click.option("--force", is_flag=True)
+@click.option("--zipdirs", type=click.Path(exists=True, dir_okay=False,
+                                           readable=True))
+@click.option("--include", type=str)
+@click.option("--exclude", type=str)
+def copy_help(srcdir, destdir, force, zipdirs, include, exclude):
+    """Copies and archives help sources into the install dir."""
+
+    srcdir = expandpath(srcdir)
+    destdir = expandpath(destdir)
+
+    print("Copying help from %s to %s" % (srcdir, destdir))
     t = util.perf_counter()
     zipset = set()
     if zipdirs:
-        zipdirfile = _exp(zipdirs)
+        zipdirfile = expandpath(zipdirs)
         with open(zipdirfile) as f:
             zipset = set(line.strip() for line in f)
 
@@ -530,121 +436,120 @@ def copy_help(srcdir, destdir, force=False, zipdirs=None, include=None,
         if os.path.isdir(srcpath):
             if name in zipset:
                 zfile = destpath + ".zip"
-                archive(srcpath, zfile, force=force, include=include,
-                        exclude=exclude)
+                _archive_tree(srcpath, zfile, force, include, exclude)
             else:
-                _copy_tree(srcpath, destpath, force, include, exclude, logger)
+                _copy_tree(srcpath, destpath, force, include, exclude)
         else:
-            _copy_file(srcpath, destpath, force, logger)
+            _copy_file(srcpath, destpath, force)
 
-    logger.info("Copied help in %.01f sec", util.perf_counter() - t)
-
-
-@manager.command
-def trace(path):
-    from bookish.grammars.wiki import blocks
-    from bookish.parser import parser, rules
-
-    pages = flaskapp.get_wikipages(manager.app)
-    src = pages.content(path)
-    src = wikipages.condition_string(src)
-    lines = parser.Lines(src)
-
-    ctx = wikipages.bootstrap_context()
-    i = 0
-    while not rules.streamend.at_end(src, i):
-        out, newi = blocks(src, i, ctx)
-        print(i, out, newi)
-        if not isinstance(out, dict):
-            line, col = lines.line_and_col(i)
-            print("Miss at line", line, "column", col, "(char %s)" % i)
-            print(repr(src[i:]))
-            break
-        if newi == i:
-            line, col = lines.line_and_col(i)
-            print("Stall at line", line, "column", col, "(char %s)" % i)
-            print(repr(src[i:]))
-            break
-        i = newi
+    print("Copied help in %.01f sec" % (util.perf_counter() - t,))
 
 
-@manager.command
-def dump(path):
-    from bookish.util import dump_tree
+@cli.command()
+@click.option("--file", "filepath", default=None,
+              type=click.Path(exists=True, dir_okay=False, readable=True))
+@click.option("--dir", "dirpath", default=None,
+              type=click.Path(exists=True, file_okay=False))
+@click.option("--meta", is_flag=True)
+def grammar(filepath, dirpath, meta):
+    """Generates a Python module from a Bookish grammar file."""
 
-    jsondata = parse_page(path, process=False, conditional=False)
-    dump_tree(jsondata)
-
-
-@manager.command
-def sass(path):
-    import glob
-    import sass
-
-    for filename in sorted(glob.glob(path)):
-        print("SCSS compiling %s" % filename)
-        sass.compile(filename=filename, precision=3)
-
-
-@manager.command
-def grammar(path, all=False, byname=True, meta=False, output=None):
     import os.path
     from bookish.parser.builder import build_meta, Builder
 
-    path = os.path.abspath(path)
-
-    if all and output:
-        raise InvalidCommand("Can't specify output on multiple input files")
-
-    if all:
-        print("Compiling all grammars in", path)
-        if not os.path.isdir(path):
-            raise InvalidCommand("%r is not a directory" % path)
-
-        paths = []
-        for name in os.listdir(path):
-            if name.endswith("bkgrammar"):
-                p = os.path.abspath(os.path.join(path, name))
-                paths.append(p)
+    if filepath:
+        todo = [filepath]
+    elif dirpath:
+        todo = [name for name in os.listdir(dirpath)
+                if name.endswith(".bkgrammar")]
     else:
-        paths = [path]
+        print("No grammars to compile")
+        return
 
-    if not paths:
-        print("No grammars affected")
+    for path in todo:
+        path = os.path.abspath(path)
+        dirpath, filepart = os.path.split(path)
+        basename, ext = os.path.splitext(filepart)
+        outpath = os.path.join(dirpath, basename + ".py")
 
-    for p in paths:
-        dirpath, filename = os.path.split(p)
-        basename, ext = os.path.splitext(filename)
-
-        if output:
-            outpath = os.path.abspath(output)
-        else:
-            outpath = os.path.join(dirpath, basename + ".py")
-
-        print("Compiling", p)
-        with open(p) as f:
+        print("Compiling grammar in", path, "to", outpath)
+        with open(path) as f:
             gstring = f.read()
-
-        print("Writing", outpath)
         with open(outpath, "w") as o:
-            if meta or (byname and basename == "meta"):
+            if meta or basename == "meta":
                 build_meta(gstring, o)
             else:
                 Builder(file=o).build_string(gstring)
 
 
+@cli.command()
+@click.option("--prefix", type=str, default="/")
+@click.option("-t", "--top", type=int, default=10)
+@click.pass_obj
+def profile(pages, prefix, top):
+    """Tests the parsing time of every wiki pages in a tree."""
+
+    indexer = pages.indexer()
+    searcher = indexer.searcher()
+    t = util.perf_counter()
+
+    print("Parsing all pages")
+    times = []
+    for path in util.get_prefixed_paths(pages, prefix):
+        if not pages.is_wiki_source(path):
+            continue
+
+        tt = util.perf_counter()
+        _ = pages.json(path, searcher=searcher, conditional=False,
+                       save_to_cache=False)
+        secs = util.perf_counter() - tt
+        times.append((secs, path))
+        print(path, secs)
+    times.sort(reverse=True)
+
+    print("\nTotal time", util.perf_counter() - t)
+    if top:
+        print("TOP", top, "SLOWEST")
+        for secs, path in times[:top]:
+            print(path, secs)
+
+
+@cli.command()
+@click.argument("vpath", type=str, required=True)
+@click.option("--cache/--no-cache", default=False)
+@click.pass_obj
+def profile_page(pages, vpath, cache):
+    """Tests the parsing time of a single wiki page."""
+
+    indexer = pages.indexer()
+    searcher = indexer.searcher()
+
+    # Delete page from cache to make sure it's reparsed
+    spath = pages.source_path(vpath)
+    pages.cache.delete_path(spath)
+
+    print("Parsing", spath)
+    context = pages.wiki_context(spath, conditional=cache, save_to_cache=False,
+                                 searcher=searcher, profiling=True)
+
+    t = util.perf_counter()
+    _ = pages.json(spath, wcontext=context)
+    print("\nTotal time", util.perf_counter() - t)
+
+    proc_times = context["proc_time"]
+    for path, parse_secs in context["parse_time"]:
+        print("%s %0.06f" % (path, parse_secs))
+        # for procname, proc_secs in proc_times[path]:
+        #     print("    %s %0.06f" % (procname, proc_secs))
+
+
 def runhelp(*args):
-    def _patched_handle(self, prog, args=None):
-        return self._old_handle(self._prog, args)
-
-    # Quick monkey patching for flask.ext.script.Manager so that
-    # we can pass in the hhelp executable path as argv[0]
-    Manager._old_handle = Manager.handle
-    Manager.handle = _patched_handle
-    manager._prog = args[0]
-    __import__('sys').argv = [__file__] + list(args[1:])
-    manager.run()
+    # The hhelp executable does some weird stuff I don't understand and runs
+    # this function instead of starting the script from the command line in the
+    # normal way. So here we have to invoke the main cli object as if it was run
+    # from the command line, which fortunately click has a method for.
+    cli.main(prog_name=args[0], args=args[1:])
 
 
-if __name__ == "__main__":
-    manager.run()
+if __name__ == '__main__':
+    cli()

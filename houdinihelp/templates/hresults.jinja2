@@ -1,0 +1,9 @@
+{% extends "results.jinja2" %}
+{% import "hwiki.jinja2" as hwiki with context %}
+
+{% macro type_desc(hit) -%}
+    {{ hwiki.type_desc(hit) }}
+{%- endmacro %}
+{% macro category_desc(catname) -%}
+    {{ hwiki.category_desc(catname) }}
+{% endmacro %}

@@ -1,34 +1,169 @@
-{% extends "/templates/page.jinja2" %}
+{% extends "page.jinja2" %}
+{% import "hwiki.jinja2" as hwiki with context %}
+{% import "util.jinja2" as util with context %}
+
+{% block prehead %}
+    {% if config.GOOGLE_API_KEY %}
+        <!-- Global site tag (gtag.js) - Google Analytics -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=UA-2947225-1"></script>
+        <script>
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'UA-2947225-1');
+        </script>
+    {% endif %}
+{% endblock %}
+
+{% block bodyclass -%}
+    {{ super() }}
+    {% if docroot.node_hidden %}node_hidden{% endif %}
+    {% if docroot.node_deprecated %}node_deprecated{% endif %}
+{%- endblock %}
 
 {% block styles %}
     {{ super() }}
-    <link rel="stylesheet" href="{{ rel("/static/css/hpage.css") }}">
-    <!-- {{ config.VARS.MAJOR_VERSION }}.{{ config.VARS.MINOR_VERSION }}.{{ config.VARS.BUILD_VERSION }} -->
+    <link rel="stylesheet" href="{{ rel("/static/scss/hpage.css") }}">
+    <!-- {{ config.MAJOR_VERSION }}.{{ config.MINOR_VERSION }}.{{ config.BUILD_VERSION }} -->
 {% endblock %}
 
 {% block scripts %}
     {{ super() }}
     <script type="text/javascript" src="{{ rel("/static/js/load.js") }}"></script>
+    <script type="text/javascript" src="{{ rel("/static/js/qwebchannel.js") }}"></script>
 {% endblock %}
 
 {% block brand -%}
-    <a href="{{ rel("/") }}" class="brand navitem"><img src="{{ rel("/icons/MISC/logo.svg") }}" width="32" height="32" /></a>
+    <a href="{{ rel("/", ".html") }}" class="brand navitem">
+        <img src="{{ rel("/images/logos/houdini_white.svg")}}" />
+    </a>
+    {% set top = docroot.parents[0] if docroot.parents else docroot %}
+{#    <a href="{{ rel("/", ".html") }}" class="brandname navitem">{{ render_styles(top.title) }}</a>#}
 {%- endblock %}
 
 {% block searchbox %}
-    {% if config.VARS.USE_GOOGLE %}
-        <div id="googlebox" class="navitem">
-            <form action="http://www.google.com/cse" id="cse-search-box">
-		        <input type="hidden" name="cx" value="001106583893786776783:w98mmkqk_7e" />
+    {% if config.GOOGLE_API_KEY %}
+        <span id="navsearch" class="googlesearch">
+            <form action="https://www.google.com/cse" id="cse-search-box">
+		        <input type="hidden" name="cx" value="{{ config.GOOGLE_API_KEY }}" />
                 <input type="hidden" name="ie" value="UTF-8" />
                 <input type="text" name="q" size="31" />
                 <input type="submit" name="sa" value="Search" />
             </form>
-        </div>
-        <script type="text/javascript" src="http://www.google.com/coop/cse/brand?form=cse-search-box&amp;lang=en">
+        </span>
+        <script type="text/javascript" src="https://www.google.com/coop/cse/brand?form=cse-search-box&amp;lang=en">
         // This comment prevents the wiki2html translator from collapsing the opening and closing 'script' tags into one.  Collapsed script tags do not work on all browsers.
         </script>
     {% else %}
         {{ super() }}
     {% endif %}
+{% endblock %}
+
+{% block subtitle %}
+    {% if docroot.subtitle %}
+        <span class="subtitle">{{ docroot.subtitle }}</span>
+    {% else %}
+        <span class="subtitle">
+            {{- hwiki.type_desc(docroot) -}}
+        </span>
+    {% endif %}
+{% endblock subtitle %}
+
+{% block premeta %}
+    {{ super() }}
+
+    {% if docroot.node_deprecated %}
+        <div class="page-warning node-deprecation-warning">
+            <p>This node type is <strong>deprecated</strong>. It is scheduled to be
+                deleted in an upcoming revision of Houdini.</p>
+            {% if docroot.node_replacement_path %}
+                <p class="node-deprecation-replacement">Use the
+                <a href="{{ rel(docroot.node_replacement_path) }}">{{ docroot.node_replacement_label }}</a>
+                node instead.</p>
+            {% endif %}
+            {% if docroot.node_deprecation_reason %}
+                <p class="node-deprecation-reason">{{ docroot.node_deprecation_reason }}</p>
+            {% endif %}
+            {% if docroot.node_deprecation_version %}
+                <p class="node-deprecation-version">(Since version {{ docroot.node_deprecation_version }}.)</p>
+            {% endif %}
+        </div>
+    {% elif docroot.node_hidden %}
+        <div class="page=warning node-hidden-warning">
+        This node type is <strong>hidden</strong>. It is no longer supported.
+        </div>
+    {% endif %}
+
+    {# Since #}
+    {% if docroot.attrs and docroot.attrs.since %}
+        {% call util.print_meta_row("Since") %}
+            {{ docroot.attrs.since }}
+        {% endcall %}
+    {% endif %}
+
+    {# Replaced by #}
+    {% if docroot.replacedby %}
+        {% set pagetype = docroot.attrs.type if docroot.attrs else None %}
+        {% set label = "HOM equivalent" if pagetype == "expression" else "Replaced by" %}
+        {% call util.print_meta_row(label) %}
+            {% for repl in docroot.replacedby %}
+                {{ util.print_hit_box(repl, show_icon=False) }}
+            {% endfor %}
+        {% endcall %}
+    {% endif %}
+
+    {# HOM inheritence #}
+    {% call util.print_meta_row("Inheritance", cond=docroot.superclasses or docroot.subclasses) %}
+        {% if docroot.superclasses %}
+            {% for supclass in docroot.superclasses | reverse %}
+                <ul>
+                    <li class="inheritence">
+                        <a href="{{ rel(supclass.path, ".html") }}">{{ render_styles(supclass.title) }}</a>
+                    </li>
+            {% endfor %}
+        {% endif %}
+        <ul>
+            <li class="inheritence">
+                <strong>{{ render_styles(docroot.title) }}</strong>
+                {% if docroot.subclasses %}
+                    <ul>
+                        {% for subclass in docroot.subclasses -%}
+                            <li class="inheritence"><a href="{{ rel(subclass.path, ".html") }}">{{ subclass.title }}</a></li>
+                        {%- endfor %}
+                    </ul>
+                {% endif %}
+            </li>
+        </ul>
+        {% if docroot.superclasses %}
+            {% for supclass in docroot.superclasses %}</ul>{% endfor %}
+        {% endif %}
+    {% endcall %}
+
+    {# Example for #}
+    {% call util.print_meta_row("Example for", cond=docroot.examplefor) %}
+        {{ hwiki.print_example_for(docroot.examplefor, searcher) }}
+    {% endcall %}
+
+    {# Example file #}
+    {% call util.print_meta_row("Example", cond=docroot.examplefile) %}
+        {{ hwiki.print_example_button(docroot.examplefile, False) }}
+    {% endcall %}
+
+    {# VEX contexts #}
+    {% if attrs.type == "vex" and attrs.context and attrs.context != "all" %}
+        {% call util.print_meta_row("Context(s)") %}
+            {% for ctx in attrs.context.split(",") %}
+                <a href="{{ rel("/vex/contexts/" + ctx.strip(), ".html") }}">{{ ctx }}</a>
+            {% endfor %}
+        {% endcall %}
+    {% endif %}
+{% endblock %}
+
+{% block postmeta %}
+    {{ super() }}
+
+    {# Replaces #}
+    {% call util.print_meta_row("Replaces", cond=replaces) %}
+        {{ render_styles(replaces.body) }}
+    {% endcall %}
 {% endblock %}

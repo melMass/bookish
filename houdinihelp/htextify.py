@@ -1,5 +1,6 @@
-from bookish import textify, functions
+from bookish import functions
 from bookish.avenue import patterns as pt
+from bookish.text import textify
 
 
 # var_finder = parse('body.0.text..@type="var"')
@@ -13,7 +14,7 @@ var_finder = pt.Ancestor(
 )
 
 
-repl_quotes = [(u'"', u'\\"')]
+homstring_quotes = [(u'"', u'\\\\\\"')]
 
 
 class HoudiniTextifier(textify.BookishTextifier):
@@ -29,39 +30,44 @@ class HoudiniTextifier(textify.BookishTextifier):
             with self.push(indent=4):
                 self.render(body)
 
-        elif pagetype == "expression" or pagetype == "vex":
-            self.emit(u"{")
+        elif pagetype == "expression":
             self.render_body(body)
-            self.emit(u"}")
 
         elif pagetype == "hompackage":
             self.emit(u'%define MODULE_DOCSTRING /**/ "', top=1)
-            with self.push(replacements=repl_quotes):
+            with self.push(replacements=homstring_quotes):
                 self.render(body)
             self.emit(u'" %enddef', bottom=1)
 
-        elif pagetype in (u"homclass", u"homfunction", u"hommodule"):
-            cppname = attrs["cppname"]
-            self.emit(u'%%feature("docstring") %s "' % cppname)
-            nonsect = list(subb for subb in body
-                           if subb.get("role") != "section")
-            with self.push(replacements=repl_quotes):
-                self.render(nonsect)
-            self.emit(u'";')
+        elif pagetype in (u"homclass", u"homfunction", u"hommodule",
+                          "pypackage", "pymodule", "pyfunction", "pyclass"):
+            cppname = attrs.get("cppname")
+            if cppname:
+                self.emit(u'%%feature("docstring") %s "' % cppname, wrap=False)
 
-            for subblock in body:
-                sid = subblock.get("id")
-                if sid in (u"methods", u"functions"):
-                    itemtype = sid + "_item"
+                # Render everything EXCEPT @methods or @functions sections
+                special_sections = []
+                with self.push(replacements=homstring_quotes):
+                    for subblock in body:
+                        if (
+                            subblock.get("role") == "section" and
+                            subblock.get("id") in ("methods", "functions")
+                        ):
+                            special_sections.append(subblock)
+                        else:
+                            self.render(subblock)
+
+                self.emit(u'";')
+
+                for subblock in special_sections:
+                    itemtype = subblock["id"] + "_item"
                     for itemblock in functions.find_items(subblock, itemtype):
                         self._homfn(itemblock)
 
-        elif pagetype == u"hom_module":
-            self.emit(u'%define MODULE_DOCSTRING /**/ "')
-            with self.push(replacements=repl_quotes):
-                self.render(body)
-            self.emit(u'" %enddef')
-
+        elif pagetype == u"env":
+            section = functions.first_subblock_of_type(block, "env_variables_section")
+            for item in functions.find_items(section, "env_variables_item"):
+                self.render(item)
         else:
             self.render(body)
 
@@ -83,42 +89,66 @@ class HoudiniTextifier(textify.BookishTextifier):
             self._replaced_by()
         else:
             self.render_super(block)
-            self._replaces()
+            # self._replaces()
 
     def summary_block(self, block):
         self.emit_block_text(block, top=1, bottom=1)
 
+    def usage_block(self, block):
+        self.emit_block_text(block)
+        self.render_body(block)
+
+    def usage_group_block(self, block):
+        body = block.get("body", ())
+        heading = "USAGE" if len(body) == 1 else "USAGES"
+        self.emit(heading, top=1)
+        self.render_body(body, bottom=1, indent=2)
+
+    def h_block(self, block):
+        attrs = block.get("attrs")
+        if attrs and "super_path" in attrs:
+            return
+        super(HoudiniTextifier, self).h_block(block)
+
     def _homfn(self, block):
         attrs = block.get("attrs", {})
         status = attrs.get("status")
-        if status in (u"nd", u"ni"):
-            return
+        cppname = attrs.get("cppname")
+        if cppname and status != u"ni":
+            self.emit(u'%%feature("docstring") %s "' % cppname, wrap=False)
+            with self.push(replacements=homstring_quotes):
+                self.emit(functions.string(block.get("text")), bottom=1)
+                with self.push(left=4):
+                    self.render(block.get("body", ()))
+            self.emit(u'";')
+        cppname = attrs.get("cppname")
+        if cppname:
+            self.emit(u'%%feature("docstring") %s "' % cppname, wrap=False)
+            with self.push(replacements=homstring_quotes):
+                self.emit(functions.string(block.get("text")), bottom=1)
+                with self.push(left=4):
+                    self.render(block.get("body", ()))
+            self.emit(u'";')
 
-        cppname = attrs["cppname"]
-        self.emit(u'%%feature("docstring") %s "' % cppname)
-        with self.push(replacements=repl_quotes):
-            self.render(block.get("body", ()))
-        self.emit(u'";')
-
-    def _replaces(self):
-        repls = self.root.get("attrs", {}).get("replaces")
-        if repls:
-            with self.push(bottom=1):
-                self.emit(u"Replaces", top=1, upper=True)
-                with self.push(indent=4):
-                    for repl in repls:
-                        self.emit(repl["title"], first="- ",
-                                  rest="  ")
+    # def _replaces(self):
+    #     repls = self.root.get("attrs", {}).get("replaces")
+    #     print("repls=", repr(repls))
+    #     if repls:
+    #         with self.push(bottom=1):
+    #             self.emit(u"Replaces", top=1, upper=True)
+    #             with self.push(indent=4):
+    #                 for repl in repls:
+    #                     self.emit(repl["title"], first="- ",
+    #                               rest="  ")
 
     def _replaced_by(self):
         repls = self.root.get("replacedby")
         if repls:
             with self.push(bottom=1):
-                self.emit(u"Replaced by", top=1, upper=True)
+                self.emit(u"Python Equivalent", top=1, upper=True)
                 with self.push(indent=4):
                     for repl in repls:
-                        self.emit(repl["title"], first="- ",
-                                  rest="  ")
+                        self.emit(repl["title"], first="- ", rest="  ")
 
 
 class HoudiniFormattedTextifier(HoudiniTextifier):

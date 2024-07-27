@@ -1,0 +1,12 @@
+{% extends "page.jinja2" %}
+{% import "hwiki.jinja2" as hwiki with context %}
+{% import "util.jinja2" as util with context %}
+
+{% block styles %}
+    {{ super() }}
+    <link rel="stylesheet" href="{{ rel("/static/scss/hpage.css") }}">
+    <!-- {{ config.MAJOR_VERSION }}.{{ config.MINOR_VERSION }}.{{ config.BUILD_VERSION }} -->
+{% endblock %}
+
+{% block navbar %}
+{% endblock %}

@@ -1,0 +1,712 @@
+{% extends "wiki.jinja2" %}
+{% import "util.jinja2" as util with context %}
+
+{# Helper macros #}
+
+{% macro type_desc(thing, path=None) -%}
+    {%- set path = path or topattr(thing, "fullpath") or topattr(thing, "path")  -%}
+    {%- set doctype = attr(thing, "type") or topattr(thing, "type")  -%}
+    {%- set context = topattr(thing, "context") -%}
+    {%- if path.startswith("/shelf/") and paths.barename(path) != "index" -%}shelf tool
+    {%- elif doctype == "node" -%}
+        {%- if context == "sop" %}geometry node
+        {%- elif context == "obj" %}object node
+        {%- elif context == "dop" %}dynamics node
+        {%- elif context == "cop2" %}compositing node
+	{%- elif context == "cop" %}Copernicus node
+        {%- elif context == "vop" %}VOP node
+        {%- elif context == "chop" %}channel node
+        {%- elif context == "shop" %}shader node
+        {%- elif context == "out" %}render node
+        {%- elif context == "vex" %}VOP network
+        {%- elif context == "top" %}TOP node
+        {%- endif -%}
+    {%- elif doctype == "hscript" %}HScript command
+    {%- elif doctype == "expression" %}expression function
+    {%- elif doctype == "vex" -%}
+        {%- if context == "surface" %}Surface VEX function
+        {%- elif context == "displace" %}Displace VEX function
+        {%- elif context == "light" %}Light VEX function
+        {%- elif context == "shadow" %}Shadow VEX function
+        {%- elif context == "fog" %}Fog VEX function
+        {%- elif context == "chop" %}CHOP VEX function
+        {%- elif context == "sop" %}SOP VEX function
+        {%- elif context in ("cop2", "cop") %}COP VEX function
+        {%- elif context == "image3d" %}Image3D VEX function
+        {%- elif context == "cvex" %}CVEX function
+        {%- else -%}VEX function
+        {%- endif -%}
+    {%- elif doctype == "vexcontext" %}VEX context
+    {%- elif doctype == "visualizer" %}visualizer
+    {%- elif doctype == "hommodule" or doctype == "pymodule" %}module
+    {%- elif doctype == "hompackage" or doctype == "pypackage" %}package
+    {%- elif doctype == "homclass" or doctype == "pyclass" %}class
+    {%- elif doctype == "hommethod" or doctype == "pymethod" %}method
+    {%- elif doctype == "homfunction" or doctype == "pyfunction" %}HOM function
+    {%- elif doctype == "property" %}render property
+    {%- elif doctype == "example" %}example file
+    {%- elif doctype == "attribute" %}attribute
+    {%- elif doctype == "env_variable" %}env variable
+    {%- endif -%}
+{%- endmacro %}
+
+{% macro category_desc(cat) %}
+    {%- if cat == "_" %}User guide
+    {%- elif cat == "tool" %}Shelf tools
+    {%- elif cat == "example" %}Example files
+    {%- elif cat == "node/sop" %}Geometry nodes
+    {%- elif cat == "node/obj" %}Object nodes
+    {%- elif cat == "node/dop" %}Dynamics nodes
+    {%- elif cat == "node/cop2" %}Compositing nodes
+    {%- elif cat == "node/cop" %}Copernicus nodes
+    {%- elif cat == "node/vop" %}VOP nodes
+    {%- elif cat == "node/chop" %}Channel nodes
+    {%- elif cat == "node/shop" %}Shader nodes
+    {%- elif cat == "node/out" %}Render nodes
+    {%- elif cat == "node/top" %}TOP nodes
+    {%- elif cat == "node/vex" %}VOP networks
+    {%- elif cat == "hscript" %}HScript commands
+    {%- elif cat == "expression" %}Expression functions
+    {%- elif cat == "vex" %}VEX functions
+    {%- elif cat == "vexcontext" %}VEX contexts
+    {%- elif cat == "visualizer" %}Visualizers
+    {%- elif cat == "hommodule" %}Modules
+    {%- elif cat == "hompackage" %}Packages
+    {%- elif cat == "homclass" %}Classes
+    {%- elif cat == "hommethod" %}Methods
+    {%- elif cat == "homfunction" %}HOM functions
+    {%- elif cat == "example" %}Example files
+    {%- elif cat == "property" %}Render properties
+    {%- elif cat == "gallery/shop" %}Gallery material
+    {%- elif cat == "utility" %}Utilities
+    {%- elif cat == "reference" %}Reference
+    {%- elif cat == "attribute" %}Attributes
+    {%- elif cat == "env_variable" %}Env variables
+    {%- elif cat == "pyscripting" %}Python scripting
+    {%- else %}({{ cat }})
+    {%- endif -%}
+{% endmacro %}
+
+{% macro print_example_button(path, launch=False) %}
+    {%- set label = "Launch" if launch else "Load" -%}
+    <button class="load-example {% if launch %}secondary{% endif %}" data-path="{{ path }}" data-launch="{{ launch }}">
+        {{- label -}}
+    </button>
+{% endmacro %}
+
+{% macro print_example(href, title, body, examplefile, examplefor=None, launch=True) %}
+    {% set fortitle = hit.title if hit else "" %}
+
+    <div class="example item"
+         data-title="{{ string(title) | lower | escape }} {{ fortitle.lower() }}"
+         data-examplefor="{{ fortitle }}" data-examplefile="{{ examplefile }}"
+    >
+		{% if examplefile %}
+	        <div class="example-buttons">
+	            {{ print_example_button(examplefile, False) }}
+	            {% if launch and examplefile.endswith(".otl") or examplefile.endswith(".hda") %}
+	                {{ print_example_button(examplefile, True) }}
+	            {% endif %}
+	        </div>
+		{% endif %}
+        <p class="label">
+            {% if href %}
+                <a href="{{ href }}">{{ render(title) }}</a>
+            {% else %}
+                {{ render(title) }}
+            {% endif %}
+            {% if examplefor %}
+                {% set hit = searcher.document(path=examplefor) %}
+                {% if hit %}
+                    <span class="egfor">
+                        Example for
+                        <a href="{{ rel(hit.path, ".html") }}">{{ hit.title }}</a>
+                        {{ type_desc(hit) }}
+                    </span>
+                {% endif %}
+            {% endif %}
+        </p>
+
+        <div class="content">
+            {#
+            {% if hit %}
+                {{ util.print_hit_box(hit, show_icon=False) }}
+            {% endif %}
+            #}
+            {% if body %}
+                {% for sub in body %}
+                    {% if sub.type not in ("title", "section") %}
+                       {{ render(sub) }}
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro print_example_for(examplefor, searcher, show_icon=True, show_type=True) %}
+    {% for nodepath in examplefor.split() -%}
+        {%- set hit = searcher.document(path=nodepath) -%}
+        {%- if hit -%}
+            {{ util.print_hit_box(hit, show_icon=show_icon) }}
+        {%- endif -%}
+    {%- endfor %}
+{% endmacro %}
+
+{% macro print_prop_metadata(block) %}
+    {% if block.attrs %}
+        {% set hprop = block.attrs.hprop %}
+        {% set ifdprop = block.attrs.ifdprop %}
+        {% set defval = block.attrs.default %}
+
+        {% if hprop or ifdprop or defval %}
+            <div class="compact metadata">
+                {% if hprop %}{{ print_metadata("Houdini render property", hprop, tt=True) }}{% endif %}
+                {% if ifdprop %}{{ print_metadata("IFD property", ifdprop, tt=True) }}{% endif %}
+                {% if defval %}{{ print_metadata("Default", defval, tt=True) }}{% endif %}
+            </div>
+        {% endif %}
+    {% endif %}
+{% endmacro %}
+
+
+{# Links #}
+
+{% macro Example_link_rule(this) -%}
+    {{- print_example_button(this.value) -}}
+{%- endmacro %}
+
+
+{# Actions #}
+
+{% macro action_rule(this) %}
+    {% set status = string(this.attrs.status) if this.attrs %}
+    {% set display = string(this.attrs.display) if this.attrs %}
+
+    <div id="{{ block_id(this) }}" class="item {{ this.type }} {{ status }} {{ display }}"
+        data-title="{{ string(this.text) | lower | escape }}"
+    >
+        <div class="label">
+            {% if this.attrs and this.attrs.glyph %}
+                <div class="g"><i class="fa {{ this.attrs.glyph }}"></i></div>
+            {% endif %}
+            {{ render(this.text) }}
+            {% if this.hotkeys %}
+                {% for keys in this.hotkeys %}
+                    {{ print_keys(keys) }}
+                {% endfor %}
+            {% endif %}
+        </div>
+        <div class="content">
+            {{ render(this.body) }}
+        </div>
+    </div>
+{% endmacro %}
+
+
+{# HOM #}
+
+{% macro methods_section_rule(this) %}
+    {% set attrs = this.attrs | d({}) %}
+    {% call print_heading(this, this.text, "section", level=2) %}
+        {% call print_filtered(attrs, sortable=True) %}
+            {{ render(this.body) }}
+        {% endcall %}
+    {% endcall %}
+{% endmacro %}
+
+{% macro functions_section_rule(this) %}
+    {% set attrs = this.attrs | d({}) %}
+    {% call print_heading(this, this.text, "section", level=2) %}
+        {% call print_filtered(attrs, sortable=True) %}
+            {{ render(this.body) }}
+        {% endcall %}
+    {% endcall %}
+{% endmacro %}
+
+{% macro values_item_group_rule(this) %}
+    <div>
+        {{ render(this.body) }}
+    </div>
+{% endmacro %}
+{% macro values_item_rule(this) %}
+    {% set text = string(this.text).strip() %}
+    {% if this.prefix %}
+        {% set prefix = this.prefix %}
+        {% set prelen = this.prefix | length %}
+        {% if text.startswith(prefix + ".") %}
+            {% set text = text[prelen + 1:] %}
+        {% endif %}
+    {% elif "." in text %}
+        {% set parts = string(this.text).rsplit(".", 1) %}
+        {% set prefix = parts[0] %}
+        {% set text = parts[1] %}
+    {% endif %}
+    <div class="values_item item def" data-title="{{ string(text) }}">
+        <p class="label">
+            <code><span class="prefix">{{ prefix }}</span>.{{ text }}</code>
+        </p>
+        <div class="content">
+            {{ render(this.body) }}
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro enums_item_group_rule(this) %}
+    {{ values_item_group_rule(this) }}
+{% endmacro %}
+{% macro enums_item_rule(this) %}
+    {{ values_item_rule(this) }}
+{% endmacro %}
+
+{% macro homfn(this, sup=None, meth=None) %}
+    {% set attrs = this.attrs | d({}) %}
+    {% set status = string(attrs.status) or this.status %}
+    {% set bid = string_before(this.text, "(") %}
+    {% set text = text_replace(this.text, "(self, ", "(") %}
+    {% set text = text_replace(text, "(self)", "()") %}
+    {% set modes = attr_bag(this, "mode") %}
+
+    <div class="collapsible {% if not preview %}collapsed{% endif %} method item {{ status }}"
+        id="{{ bid }}"
+        data-title="{{ string(text) | lower | escape }}"
+        data-tags="{{ attrs.tags }}"
+    >
+        <p class="label">
+            {%- if sup -%}
+                <code><a href="{{ rel(sup.path, ".html") }}#{{ meth.name }}">{{ sup.title }}</a>.</code>
+            {%- endif -%}
+            {% for span in text -%}
+                {%- if span.type == "code" -%}
+                    <code class="syntax">
+                        {{- format_code(span, pre=False, lexername="python") -}}
+                    </code>
+                {%- else -%}
+                    {{ render(span) }}
+                {%- endif -%}
+            {%- endfor %}
+        </p>
+        {% if modes %}
+            <p class="modes">
+            {% if "static" in modes %}<span class="static mode">Static method</span>{% endif %}
+            {% if "class" in modes %}<span class="class mode">Class method</span>{% endif %}
+            {% if "prop" in modes %}<span class="prop mode">Property</span>{% endif %}
+            {% if "r" in modes %}<span class="ro mode">Read only</span>{% endif %}
+            {% if "w" in modes %}<span class="wo mode">Write only</span>{% endif %}
+            </p>
+        {% endif %}
+        <div class="content">
+            {% if status == "ni" %}
+                <p class="ni-message">This method is not yet implemented.</p>
+            {% elif status == "nd" %}
+                <p class="nd-message">This method is not yet documented.</p>
+            {% elif this.body %}
+                {{ render(this.body) }}
+            {% elif meth %}
+                <p>
+                    {{ render(meth.summary) }}
+                    {% if meth.more %}
+                        <a href="{{ rel(sup.path, ".html") }}#{{ meth.name }}"><span class="fa fa-external-link-square"></span></a>
+                    {% endif %}
+                </p>
+            {% endif %}
+        </div>
+        <div class="collapsed-content">
+            {{ subblocks_summary(this) }}
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro methods_item_rule(this) %}
+    {{ homfn(this) }}
+{% endmacro %}
+
+{% macro functions_item_rule(this) %}
+    {{ homfn(this) }}
+{% endmacro %}
+
+
+{# Setup #}
+
+{% macro parm_group_rule(this) %}
+    <div class="settings">
+        {{ render(this.body) }}
+    </div>
+{% endmacro %}
+
+{% macro parm_rule(this) %}
+    <div class="setting">
+        <div class="label">{{ render(this.text) }}</div>
+        <div class="content">
+            {{ render(this.body) }}
+        </div>
+    </div>
+{% endmacro %}
+
+
+{# Nodes #}
+
+{% macro parameters_item_group_rule(this) %}
+    <div class="parameters sbs-group">
+        {{ render(this.body) }}
+    </div>
+{% endmacro %}
+{% macro parameters_item_rule(this) %}
+    {% set display = string(this.attrs.display) if this.attrs %}
+    {% set status = string(this.attrs.status) if this.attrs %}
+    {% set hprop = string(this.attrs.hprop) if this.attrs %}
+    {% set ifdprop = string(this.attrs.ifdprop) if this.attrs %}
+
+    <div id="{{ block_id(this) }}" class="parameter sbs-item {{ status }}">
+        <p class="label">{{ render(this.text) }}</p>
+        <div class="content">
+            {{ print_prop_metadata(this) }}
+            {{ render(this.body) }}
+        </div>
+    </div>
+{% endmacro %}
+
+
+{# Node examples #}
+
+{% macro examples_section_rule(this) %}
+    {% call print_heading(None, "Examples", "section", id="examples", level=2) %}
+        {{ render(this.body) }}
+
+        {% if docroot.attrs and docroot.attrs.type == "node" and this.usages %}
+            <p>The following examples include this node.</p>
+
+            {{ render(this.usages) }}
+        {% endif %}
+    {% endcall %}
+{% endmacro %}
+
+{% macro usage_group_rule(this) %}
+    {{ render(this.body) }}
+{% endmacro %}
+{% macro usage_rule(this) %}
+    {% set pagetype = docroot.attrs.type if docroot.attrs else None %}
+    {% if pagetype == "homfunction" %}
+        {% set syntax = "python" %}
+    {% elif pagetype in ("expression", "command") %}
+        {% set syntax = "hscript" %}
+    {% endif %}
+
+    {% if not(this.attrs and this.attrs.status == "deprecated") %}
+        <div class="usage item">
+            <p class="label">
+                {% if pagetype in ("vex", "vexsuite") %}
+                    {% set sigstring = string(this.text) %}
+                    {% set styledvex = vex_to_wiki(sigstring) %}
+                    <code class="vexsignature">
+                        {{ render(styledvex) }}
+                    </code>
+                    {% if styledvex.error %}
+                        <code class="vexerror">{{ styledvex.error }}</code>
+                    {% endif %}
+                {% else %}
+                    {% for span in this.text -%}
+                        {%- if span.type == "code" -%}
+                            <span class="code-container"><code class="codehilite">
+                                {{- format_code(span, lexername=syntax) -}}
+                            </code></span>
+                        {%- else -%}
+                            {{ render(span) }}
+                        {%- endif -%}
+                    {%- endfor %}
+                {% endif %}
+            </p>
+            {%  if this.body %}
+                <div class="content">{{ render(this.body) }}</div>
+            {% endif %}
+        </div>
+    {% endif %}
+{% endmacro %}
+
+{% macro load_example_group_rule(this) %}
+    <div class="examples">
+        {{ render(this.body) }}
+    </div>
+{% endmacro %}
+{% macro load_example_rule(this) %}
+    {% set attrs = this.attrs | d({}) %}
+    {% set href = rel(this.path or attrs.path, ".html") %}
+    {% set egfile = this.examplefile or attrs.examplefile %}
+    {% set egfor = this.examplefor or attrs.examplefor %}
+    {{ print_example(href, this.text, this.body, egfile, egfor) }}
+{% endmacro %}
+
+{% macro list_examples_rule(this) %}
+    {% call print_filtered({"filters": "examplefor"}) %}
+        {{ render(this.body) }}
+    {% endcall %}
+{% endmacro %}
+{% macro grouped_examples_rule(this) %}
+    {% set hit = searcher.document(path=this.key) if this.key else None %}
+    {% set text = hit.title if hit else this.key %}
+    {% if this.body %}
+        {% call print_heading(this, text, "example-group heading", level=2) %}
+            {{ render(this.body) }}
+        {% endcall %}
+    {% endif %}
+{% endmacro %}
+
+{# Shelves #}
+
+{% macro shelf_set_rule(this) %}
+    <div class="shelfset" id="{{ this.name }}">
+        {{ render(this.body) }}
+    </div>
+{% endmacro %}
+
+{% macro shelf_tab_rule(this) %}
+    {% call print_heading(this, this.label, "heading", id=this.name) %}
+        <div class="shelftab">
+        {{ render(this.body) }}
+        </div>
+    {% endcall %}
+{% endmacro %}
+
+{% macro shelf_tool_rule(this) %}
+    {% set ref = rel(this.path) if this.path else help_url %}
+    <div class="shelftool" id="{{ this.name }}">
+        {{ util.print_icon(this.icon, cls="shelficon") }}
+        <p class="text"><a href="{{ ref }}" class="{% if not this.exists %}missing{% endif %}">{{ this.label }}</a></p>
+        {% if this.summary %}
+        <p class="summary">{{ render(this.summary) }}</p>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{# Attributes #}
+
+{% macro attributes_item_group_rule(this) %}
+    <table class="attributes">
+        {{  render(this.body) }}
+    </table>
+{% endmacro %}
+{% macro attributes_item_rule(this) %}
+    {% set attrs = this.attrs | d({}) %}
+    <tr>
+        <td>
+            <p id="{{ this.id }}">{{ render(this.text) }}</p>
+        </td>
+        <td>{{ attrs.type | escape }}</td>
+        <td>
+            {{ render(this.body) }}
+
+            {% if attrs.default or attrs.on %}
+                <p class="metaline">
+                    {% if attrs.default %}
+                        <span class="name">Default</span>
+                        <span class="value">{{ attrs.default | escape }}</span>
+                    {% endif %}
+                    {% if attrs.on %}
+                        <span class="name">On</span>
+                        <span class="value">{{ attrs.on | escape }}</span>
+                    {% endif %}
+                </p>
+            {% endif %}
+        </td>
+    </tr>
+{% endmacro %}
+
+{% macro top_attributes_section_rule(this) %}
+    {% call print_heading(this, "TOP Attributes", "section", level=2) %}
+        {{ render(this.body) }}
+    {% endcall %}
+{% endmacro %}
+{% macro top_attributes_item_group_rule(this) %}
+    <table class="top attributes">
+        {{  render(this.body) }}
+    </table>
+{% endmacro %}
+{% macro top_attributes_item_rule(this) %}
+    {% set attrs = this.attrs | d({}) %}
+    <tr>
+        <td>
+            <p id="{{ this.id }}"><code>{{ render(this.text) }}</code></p>
+        </td>
+        <td>{{ attrs.type | escape }}</td>
+        <td>
+            {{ render(this.body) }}
+        </td>
+    </tr>
+{% endmacro %}
+
+
+{# VEX #}
+
+{% macro vexmarkup_rule(this) -%}
+    <span class="{{ this.type }} {% if this.out %}vexout{% endif %}">{{ render(this.text) }}</span>
+{%- endmacro %}
+{% macro vextype_rule(this) -%}
+    <span class="vextype vex{{ string(this.text) }}">{{ render(this.text) }}&nbsp;</span>
+{%- endmacro %}
+{% macro vexargument_rule(this) -%}
+    <span class="vexargtype">{{ render(this.vextype) }}</span>
+    {%- if this.vexout %}<span class="vexout">&</span>{% endif -%}
+    <span class="vexname">{{ this.text }}</span>
+    {%- if this.isarray %}[]{% endif -%}
+    {%- if this.vexopt %}{{ this.vexopt }}{% endif -%}
+{%- endmacro %}
+
+{% macro arg_group_rule(this) %}
+    {% set groupid = block_id(this) %}
+    {% set pagetype = docroot.attrs.type if docroot.attrs else None %}
+    {% set startfolded = pagetype == "vexsuite" %}
+
+    <label for="fold-{{ groupid }}" class="fold-text">Show/hide arguments</label>
+    <input type="checkbox" class="fold-state"
+        name="fold-{{ groupid }}" id="fold-{{ groupid }}"
+        {{ "checked" if not startfolded }}
+    >
+    <div class="arglist foldable {{ "folded" if startfolded else "" }}" width="100%">
+        {{ render(this.body) }}
+    </div>
+{% endmacro %}
+
+{% macro arg_rule(this) %}
+    {% set default = attr(this, "default") %}
+    {% set vextype = attr(this, "type") %}
+    {% set variadic = this.variadic or attr(this, "variadic") == "yes"  %}
+    {% set version = attr(this, "version") %}
+
+    <div class="arg {% if this.returns %}returns{% endif %} {% if variadic %}variadic{% endif %}">
+        <p class="label">
+            {% if this.returns and not this.text -%}
+                Returns
+            {% elif variadic %}
+                "{{ render(this.text) }}",
+                {% if vextype %}<code class="vextype">{{ vextype }}</code>{% endif %}
+                {% if default %}
+                    <code class="argdefault">={{ default }}</code>
+                {% endif %}
+            {% else %}
+                {{ render(this.text) }}
+            {% endif %}
+            {% if version %}
+                <span class="version">{{ version }}</span>
+            {% endif %}
+        </p>
+        <div class="content">
+            {% if this.returns and string(this.text) %}
+                <p>{{ render(this.text) }}</p>
+            {% endif %}
+            {{ render(this.body) }}
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro globals_item_group_rule(this) %}
+    <table>
+        {{ render(this.body) }}
+    </table>
+{% endmacro %}
+{% macro globals_item_rule(this) %}
+    {% set attrs = this.attrs | d({}) %}
+    <tr>
+        <td class="globaltype"><code class="vextype vex{{ this.attrs.type }}">{{ this.attrs.type }}</code></td>
+        <td class="globalname">
+            <code>{{ render(this.text) }}</code>
+        </td>
+        <td class="globalmode">
+            {% if attrs.mode == "r" %}Read only
+            {% elif attrs.mode == "w" %}Write only
+            {% endif %}
+        </td>
+        <td>
+            {{ render(this.body) }}
+        </td>
+    </tr>
+{% endmacro %}
+
+
+{% macro connection_item(this) %}
+    {% set type = this.attrs.type if this.attrs %}
+    {% set required = this.attrs.required == 'true' if this.attrs %}
+    <div id="{{ block_id(this) }}" class="connection_item" data-title="{{ type }} {{ string(this.text) }}">
+        <div class="label">
+            <code>
+                <strong>{{ render(this.text) }}</strong>{% if type %}:
+                    <span class="apextype vextype">{{ type | escape }}</span>
+                {% endif %}
+            </code>
+            {% if required %}
+                <span class="info">Required</span>
+            {% endif %}
+        </div>
+        <div class="content">
+            {{ render(this.body) }}
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro inputs_item_rule(this) %}
+    {{ connection_item(this) }}
+{% endmacro %}
+
+{% macro outputs_item_rule(this) %}
+    {{ connection_item(this) }}
+{% endmacro %}
+
+
+{% macro suite_list_rule(this) %}
+    {{ render(this.body) }}
+{% endmacro %}
+
+{% macro suite_item_rule(this) %}
+    {% set fields = this.fields %}
+    <div class="suite-item" id="{{ block_id(this) }}">
+        <p class="suite-label">
+            {% if fields %}
+                {{ util.print_hit_link(fields) }}
+            {% endif %}
+            {{ render(this.text) }}
+        </p>
+        <div class="suite-content">
+            {{ render(this.body) }}
+        </div>
+    </div>
+{% endmacro %}
+
+
+{# Mantra #}
+
+{% macro properties_section_rule(this) %}
+    {% set attrs = this.attrs | d({}) %}
+    {% call print_heading(this, this.text, "section", level=2) %}
+        {% call print_filtered(attrs) %}
+            {{ render(this.body) }}
+        {% endcall %}
+    {% endcall %}
+{% endmacro %}
+{% macro properties_item_group_rule(this) %}
+    <div class="properties_item_group">
+        {{ render(this.body) }}
+    </div>
+{% endmacro %}
+{% macro properties_item_rule(this) %}
+    {% set status = this.attrs.status if this.attrs %}
+    {% set sable = " ".join((string(this.text), string(hprop), string(ifdprop))) %}
+
+    <div class="properties_item item {{ status }}"
+        data-title="{{ sable | lower | escape }}"
+    >
+        <p class="label">
+            <a name="{{ hprop }}"></a><a name="{{ ifdprop }}"></a>
+            {{ render(this.text) }}
+        </p>
+        <div class="content">
+            {{ print_prop_metadata(this) }}
+            {% if status == "nd" or not this.body %}
+                <p><em>This property is not documented.</em></p>
+            {% else %}
+                {{ render(this.body) }}
+            {% endif %}
+        </div>
+    </div>
+{% endmacro %}
+
+
+
